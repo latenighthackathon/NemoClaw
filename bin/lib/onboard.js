@@ -183,18 +183,59 @@ async function setupNim(sandboxName, gpu) {
   let provider = "nvidia-nim";
   let nimContainer = null;
 
+  // Detect local inference options
+  const hasOllama = !!runCapture("command -v ollama", { ignoreError: true });
+  const ollamaRunning = !!runCapture("curl -sf http://localhost:11434/api/tags 2>/dev/null", { ignoreError: true });
+  const vllmRunning = !!runCapture("curl -sf http://localhost:8000/v1/models 2>/dev/null", { ignoreError: true });
+
+  // Auto-select if a local inference engine is already running
+  if (vllmRunning) {
+    console.log("  ✓ vLLM detected on localhost:8000 — using it");
+    provider = "vllm-local";
+    model = "vllm-local";
+    registry.updateSandbox(sandboxName, { model, provider, nimContainer });
+    return { model, provider };
+  }
+  if (ollamaRunning) {
+    console.log("  ✓ Ollama detected on localhost:11434 — using it");
+    provider = "ollama-local";
+    model = "nemotron-3-nano";
+    registry.updateSandbox(sandboxName, { model, provider, nimContainer });
+    return { model, provider };
+  }
+
+  // Build options list dynamically
+  const options = [];
   if (gpu && gpu.nimCapable) {
+    options.push({ key: "nim", label: "Local NIM container (NVIDIA GPU)" });
+  }
+  options.push({ key: "cloud", label: "NVIDIA Cloud API (build.nvidia.com)" });
+  if (hasOllama || ollamaRunning) {
+    options.push({ key: "ollama", label: `Local Ollama (localhost:11434)${ollamaRunning ? " — running" : ""}` });
+  }
+  if (vllmRunning) {
+    options.push({ key: "vllm", label: "Existing vLLM instance (localhost:8000) — running" });
+  }
+
+  // On macOS without Ollama, offer to install it
+  if (!hasOllama && process.platform === "darwin") {
+    options.push({ key: "install-ollama", label: "Install Ollama (recommended for macOS)" });
+  }
+
+  if (options.length > 1) {
     console.log("");
     console.log("  Inference options:");
-    console.log("    1) Local NIM container (GPU required)");
-    console.log("    2) NVIDIA Cloud API (build.nvidia.com)");
-    console.log("    3) Existing vLLM instance (localhost:8000)");
+    options.forEach((o, i) => {
+      console.log(`    ${i + 1}) ${o.label}`);
+    });
     console.log("");
 
-    const choice = await prompt("  Choose [2]: ");
-    const option = choice || "2";
+    const defaultIdx = options.findIndex((o) => o.key === "cloud") + 1;
+    const choice = await prompt(`  Choose [${defaultIdx}]: `);
+    const idx = parseInt(choice || String(defaultIdx), 10) - 1;
+    const selected = options[idx] || options[defaultIdx - 1];
 
-    if (option === "1") {
+    if (selected.key === "nim") {
       // List models that fit GPU VRAM
       const models = nim.listModels().filter((m) => m.minGpuMemoryMB <= gpu.totalMemoryMB);
       if (models.length === 0) {
@@ -208,9 +249,9 @@ async function setupNim(sandboxName, gpu) {
         console.log("");
 
         const modelChoice = await prompt(`  Choose model [1]: `);
-        const idx = parseInt(modelChoice || "1", 10) - 1;
-        const selected = models[idx] || models[0];
-        model = selected.name;
+        const midx = parseInt(modelChoice || "1", 10) - 1;
+        const sel = models[midx] || models[0];
+        model = sel.name;
 
         console.log(`  Pulling NIM image for ${model}...`);
         nim.pullNimImage(model);
@@ -227,19 +268,30 @@ async function setupNim(sandboxName, gpu) {
           provider = "vllm-local";
         }
       }
-    } else if (option === "3") {
-      // Check existing vLLM
-      const health = runCapture("curl -sf http://localhost:8000/v1/models 2>/dev/null", {
-        ignoreError: true,
-      });
-      if (health) {
-        console.log("  ✓ Existing vLLM detected on localhost:8000");
-        provider = "vllm-local";
-        model = "vllm-local";
-      } else {
-        console.log("  No vLLM instance found on localhost:8000. Falling back to cloud API.");
+    } else if (selected.key === "ollama") {
+      if (!ollamaRunning) {
+        console.log("  Starting Ollama...");
+        run("ollama serve > /dev/null 2>&1 &", { ignoreError: true });
+        require("child_process").spawnSync("sleep", ["2"]);
       }
+      console.log("  ✓ Using Ollama on localhost:11434");
+      provider = "ollama-local";
+      model = "nemotron-3-nano";
+    } else if (selected.key === "install-ollama") {
+      console.log("  Installing Ollama via Homebrew...");
+      run("brew install ollama", { ignoreError: true });
+      console.log("  Starting Ollama...");
+      run("ollama serve > /dev/null 2>&1 &", { ignoreError: true });
+      require("child_process").spawnSync("sleep", ["2"]);
+      console.log("  ✓ Using Ollama on localhost:11434");
+      provider = "ollama-local";
+      model = "nemotron-3-nano";
+    } else if (selected.key === "vllm") {
+      console.log("  ✓ Using existing vLLM on localhost:8000");
+      provider = "vllm-local";
+      model = "vllm-local";
     }
+    // else: cloud — fall through to default below
   }
 
   if (provider === "nvidia-nim") {
@@ -279,6 +331,17 @@ async function setupInference(sandboxName, model, provider) {
     );
     run(
       `openshell inference set --no-verify --provider vllm-local --model ${model} 2>/dev/null || true`,
+      { ignoreError: true }
+    );
+  } else if (provider === "ollama-local") {
+    run(
+      `openshell provider create --name ollama-local --type openai ` +
+      `--credential "OPENAI_API_KEY=ollama" ` +
+      `--config "OPENAI_BASE_URL=http://host.docker.internal:11434/v1" 2>&1 || true`,
+      { ignoreError: true }
+    );
+    run(
+      `openshell inference set --no-verify --provider ollama-local --model ${model} 2>/dev/null || true`,
       { ignoreError: true }
     );
   }
