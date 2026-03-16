@@ -30,6 +30,8 @@ Both interfaces are installed when you run `npm install -g nemoclaw`.
 ### `openclaw nemoclaw launch`
 
 Bootstrap OpenClaw inside an OpenShell sandbox.
+After provisioning the sandbox, NemoClaw runs `openclaw setup` inside it so
+`openclaw.json`, the default workspace, and session directories exist before first use.
 If NemoClaw detects an existing host installation, `launch` stops and points you to `openclaw nemoclaw migrate` unless you pass `--force`.
 
 ```console
@@ -46,7 +48,7 @@ $ openclaw nemoclaw launch [--force] [--profile <profile>]
 ### `openclaw nemoclaw migrate`
 
 Migrate an existing host OpenClaw installation into an OpenShell sandbox.
-The command snapshots the resolved OpenClaw state, captures external agent roots referenced by config, preserves symlinks in tar archives, and verifies the migrated paths inside the sandbox.
+The command snapshots the resolved OpenClaw state, captures external agent roots referenced by config, preserves symlinks in tar archives, rewrites migrated config paths, and verifies the migrated paths inside the sandbox.
 
 ```console
 $ openclaw nemoclaw migrate [--dry-run] [--profile <profile>] [--skip-backup]

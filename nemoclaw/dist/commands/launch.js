@@ -9,6 +9,7 @@ const verify_js_1 = require("../blueprint/verify.js");
 const exec_js_1 = require("../blueprint/exec.js");
 const state_js_1 = require("../blueprint/state.js");
 const migrate_js_1 = require("./migrate.js");
+const sandbox_bootstrap_js_1 = require("./sandbox-bootstrap.js");
 async function cliLaunch(opts) {
     const { force, profile, logger, pluginConfig } = opts;
     logger.info("NemoClaw launch: setting up OpenClaw inside OpenShell");
@@ -73,6 +74,15 @@ async function cliLaunch(opts) {
     }, logger);
     if (!applyResult.success) {
         logger.error(`Blueprint apply failed: ${applyResult.output}`);
+        return;
+    }
+    logger.info("Initializing OpenClaw inside the sandbox...");
+    const initialized = (0, sandbox_bootstrap_js_1.ensureSandboxOpenClawSetup)({
+        sandboxName: pluginConfig.sandboxName,
+        logger,
+    });
+    if (!initialized) {
+        logger.error("Sandbox bootstrap failed before OpenClaw could create its initial config.");
         return;
     }
     // Save state

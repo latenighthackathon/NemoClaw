@@ -8,6 +8,7 @@ import { verifyBlueprintDigest, checkCompatibility } from "../blueprint/verify.j
 import { execBlueprint } from "../blueprint/exec.js";
 import { loadState, saveState } from "../blueprint/state.js";
 import { detectHostOpenClaw } from "./migrate.js";
+import { ensureSandboxOpenClawSetup } from "./sandbox-bootstrap.js";
 
 export interface LaunchOptions {
   force: boolean;
@@ -103,6 +104,16 @@ export async function cliLaunch(opts: LaunchOptions): Promise<void> {
 
   if (!applyResult.success) {
     logger.error(`Blueprint apply failed: ${applyResult.output}`);
+    return;
+  }
+
+  logger.info("Initializing OpenClaw inside the sandbox...");
+  const initialized = ensureSandboxOpenClawSetup({
+    sandboxName: pluginConfig.sandboxName,
+    logger,
+  });
+  if (!initialized) {
+    logger.error("Sandbox bootstrap failed before OpenClaw could create its initial config.");
     return;
   }
 

@@ -249,6 +249,68 @@ console.assert(state.lastAction === null, 'Should be cleared');
 console.log('State management: create, save, load, clear all working');
 " && pass "NemoClaw state management works" || fail "State management broken"
 
+# -------------------------------------------------------
+info "10. Verify sandbox bootstrap creates openclaw.json"
+# -------------------------------------------------------
+mkdir -p /tmp/fake-bin /tmp/fake-sandbox
+cat > /tmp/fake-bin/openshell <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="${FAKE_SANDBOX_ROOT:?}"
+printf '%s\n' "$*" > "${root}/invocation.txt"
+
+if [ "$1" = "sandbox" ] && [ "$2" = "connect" ] && [ "$4" = "--" ] && [ "$5" = "openclaw" ] && [ "$6" = "setup" ]; then
+    sandbox_root="${root}/$3/.openclaw"
+    mkdir -p "${sandbox_root}/workspace" "${sandbox_root}/sessions"
+    cat > "${sandbox_root}/openclaw.json" <<'JSON'
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/sandbox/.openclaw/workspace"
+    }
+  },
+  "gateway": {
+    "mode": "local"
+  }
+}
+JSON
+    exit 0
+fi
+
+echo "unexpected openshell invocation: $*" >&2
+exit 1
+EOF
+chmod +x /tmp/fake-bin/openshell
+
+PATH="/tmp/fake-bin:$PATH" FAKE_SANDBOX_ROOT=/tmp/fake-sandbox node - <<'EOF'
+const { ensureSandboxOpenClawSetup } = require('/opt/nemoclaw/dist/commands/sandbox-bootstrap.js');
+
+const logger = {
+  info() {},
+  warn() {},
+  error(message) {
+    throw new Error(message);
+  },
+  debug() {},
+};
+
+const ok = ensureSandboxOpenClawSetup({ sandboxName: 'openclaw', logger });
+if (!ok) {
+  throw new Error('bootstrap helper returned false');
+}
+EOF
+
+grep -q '^sandbox connect openclaw -- openclaw setup$' /tmp/fake-sandbox/invocation.txt \
+    && pass "Sandbox bootstrap calls openclaw setup" \
+    || fail "Sandbox bootstrap did not run openclaw setup"
+[ -f /tmp/fake-sandbox/openclaw/.openclaw/openclaw.json ] \
+    && pass "Sandbox bootstrap created openclaw.json" \
+    || fail "Sandbox bootstrap did not create openclaw.json"
+[ -d /tmp/fake-sandbox/openclaw/.openclaw/workspace ] \
+    && pass "Sandbox bootstrap created workspace" \
+    || fail "Sandbox bootstrap did not create workspace"
+
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  ALL E2E TESTS PASSED${NC}"
