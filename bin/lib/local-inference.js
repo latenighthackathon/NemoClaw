@@ -128,6 +128,40 @@ function getOllamaWarmupCommand(model, keepAlive = "15m") {
   return `nohup curl -s http://localhost:11434/api/generate -H 'Content-Type: application/json' -d ${shellQuote(payload)} >/dev/null 2>&1 &`;
 }
 
+function getOllamaProbeCommand(model, timeoutSeconds = 120, keepAlive = "15m") {
+  const payload = JSON.stringify({
+    model,
+    prompt: "hello",
+    stream: false,
+    keep_alive: keepAlive,
+  });
+  return `curl -sS --max-time ${timeoutSeconds} http://localhost:11434/api/generate -H 'Content-Type: application/json' -d ${shellQuote(payload)} 2>/dev/null`;
+}
+
+function validateOllamaModel(model, runCapture) {
+  const output = runCapture(getOllamaProbeCommand(model), { ignoreError: true });
+  if (!output) {
+    return {
+      ok: false,
+      message:
+        `Selected Ollama model '${model}' did not answer the local probe in time. ` +
+        "It may still be loading, too large for the host, or otherwise unhealthy.",
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(output);
+    if (parsed && typeof parsed.error === "string" && parsed.error.trim()) {
+      return {
+        ok: false,
+        message: `Selected Ollama model '${model}' failed the local probe: ${parsed.error.trim()}`,
+      };
+    }
+  } catch {}
+
+  return { ok: true };
+}
+
 module.exports = {
   CONTAINER_REACHABILITY_IMAGE,
   DEFAULT_OLLAMA_MODEL,
@@ -137,7 +171,9 @@ module.exports = {
   getLocalProviderContainerReachabilityCheck,
   getLocalProviderHealthCheck,
   getOllamaModelOptions,
+  getOllamaProbeCommand,
   getOllamaWarmupCommand,
   parseOllamaList,
+  validateOllamaModel,
   validateLocalProvider,
 };

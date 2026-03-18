@@ -13,6 +13,7 @@ const {
   getLocalProviderBaseUrl,
   getOllamaModelOptions,
   getOllamaWarmupCommand,
+  validateOllamaModel,
   validateLocalProvider,
 } = require("./local-inference");
 const {
@@ -689,6 +690,11 @@ async function setupInference(sandboxName, model, provider) {
     );
     console.log(`  Priming Ollama model: ${model}`);
     run(getOllamaWarmupCommand(model), { ignoreError: true });
+    const probe = validateOllamaModel(model, runCapture);
+    if (!probe.ok) {
+      console.error(`  ${probe.message}`);
+      process.exit(1);
+    }
   }
 
   registry.updateSandbox(sandboxName, { model, provider });

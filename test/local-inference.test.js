@@ -12,8 +12,10 @@ const {
   getLocalProviderContainerReachabilityCheck,
   getLocalProviderHealthCheck,
   getOllamaModelOptions,
+  getOllamaProbeCommand,
   getOllamaWarmupCommand,
   parseOllamaList,
+  validateOllamaModel,
   validateLocalProvider,
 } = require("../bin/lib/local-inference");
 
@@ -122,5 +124,34 @@ describe("local inference helpers", () => {
     assert.match(command, /^nohup curl -s http:\/\/localhost:11434\/api\/generate /);
     assert.match(command, /"model":"nemotron-3-nano:30b"/);
     assert.match(command, /"keep_alive":"15m"/);
+  });
+
+  it("builds a foreground probe command for ollama models", () => {
+    const command = getOllamaProbeCommand("nemotron-3-nano:30b");
+    assert.match(command, /^curl -sS --max-time 120 http:\/\/localhost:11434\/api\/generate /);
+    assert.match(command, /"model":"nemotron-3-nano:30b"/);
+  });
+
+  it("fails ollama model validation when the probe times out or returns nothing", () => {
+    const result = validateOllamaModel("nemotron-3-nano:30b", () => "");
+    assert.equal(result.ok, false);
+    assert.match(result.message, /did not answer the local probe in time/);
+  });
+
+  it("fails ollama model validation when Ollama returns an error payload", () => {
+    const result = validateOllamaModel(
+      "gabegoodhart/minimax-m2.1:latest",
+      () => JSON.stringify({ error: "model requires more system memory" }),
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.message, /requires more system memory/);
+  });
+
+  it("passes ollama model validation when the probe returns a normal payload", () => {
+    const result = validateOllamaModel(
+      "nemotron-3-nano:30b",
+      () => JSON.stringify({ model: "nemotron-3-nano:30b", response: "hello", done: true }),
+    );
+    assert.deepEqual(result, { ok: true });
   });
 });
