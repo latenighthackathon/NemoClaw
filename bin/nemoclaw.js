@@ -28,9 +28,10 @@ const GLOBAL_COMMANDS = new Set([
 
 // ── Commands ─────────────────────────────────────────────────────
 
-async function onboard() {
+async function onboard(args) {
   const { onboard: runOnboard } = require("./lib/onboard");
-  await runOnboard();
+  const nonInteractive = args.includes("--non-interactive");
+  await runOnboard({ nonInteractive });
 }
 
 async function setup() {
@@ -315,7 +316,7 @@ const [cmd, ...args] = process.argv.slice(2);
   // Global commands
   if (GLOBAL_COMMANDS.has(cmd)) {
     switch (cmd) {
-      case "onboard":     await onboard(); break;
+      case "onboard":     await onboard(args); break;
       case "setup":       await setup(); break;
       case "setup-spark": await setupSpark(); break;
       case "deploy":      await deploy(args[0]); break;

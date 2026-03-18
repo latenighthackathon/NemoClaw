@@ -244,13 +244,28 @@ verify_nemoclaw() {
 # ---------------------------------------------------------------------------
 run_onboard() {
   info "Running nemoclaw onboard…"
-  nemoclaw onboard
+  if [ "${NON_INTERACTIVE:-}" = "1" ]; then
+    nemoclaw onboard --non-interactive
+  else
+    nemoclaw onboard
+  fi
 }
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 main() {
+  # Parse flags
+  NON_INTERACTIVE=""
+  for arg in "$@"; do
+    case "$arg" in
+      --non-interactive) NON_INTERACTIVE=1 ;;
+    esac
+  done
+  # Also honor env var
+  NON_INTERACTIVE="${NON_INTERACTIVE:-${NEMOCLAW_NON_INTERACTIVE:-}}"
+  export NEMOCLAW_NON_INTERACTIVE="${NON_INTERACTIVE}"
+
   info "=== NemoClaw Installer ==="
 
   install_nodejs

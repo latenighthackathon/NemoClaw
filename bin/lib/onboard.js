@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Interactive onboarding wizard — 7 steps from zero to running sandbox.
+// Supports non-interactive mode via --non-interactive flag or
+// NEMOCLAW_NON_INTERACTIVE=1 env var for CI/CD pipelines.
 
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +15,26 @@ const policies = require("./policies");
 const { checkCgroupConfig } = require("./preflight");
 const HOST_GATEWAY_URL = "http://host.openshell.internal";
 const EXPERIMENTAL = process.env.NEMOCLAW_EXPERIMENTAL === "1";
+
+// Non-interactive mode: set by --non-interactive flag or env var.
+// When active, all prompts use env var overrides or sensible defaults.
+let NON_INTERACTIVE = false;
+
+function isNonInteractive() {
+  return NON_INTERACTIVE;
+}
+
+// Prompt wrapper: returns env var value or default in non-interactive mode,
+// otherwise prompts the user interactively.
+async function promptOrDefault(question, envVar, defaultValue) {
+  if (isNonInteractive()) {
+    const val = envVar ? process.env[envVar] : null;
+    const result = val || defaultValue;
+    console.log(`  [non-interactive] ${question.trim()} → ${result}`);
+    return result;
+  }
+  return prompt(question);
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -150,7 +172,10 @@ async function startGateway(gpu) {
 async function createSandbox(gpu) {
   step(3, 7, "Creating sandbox");
 
-  const nameAnswer = await prompt("  Sandbox name (lowercase, numbers, hyphens) [my-assistant]: ");
+  const nameAnswer = await promptOrDefault(
+    "  Sandbox name (lowercase, numbers, hyphens) [my-assistant]: ",
+    "NEMOCLAW_SANDBOX_NAME", "my-assistant"
+  );
   const sandboxName = (nameAnswer || "my-assistant").trim().toLowerCase();
 
   // Validate: RFC 1123 subdomain — lowercase alphanumeric and hyphens,
@@ -165,10 +190,14 @@ async function createSandbox(gpu) {
   // Check if sandbox already exists in registry
   const existing = registry.getSandbox(sandboxName);
   if (existing) {
-    const recreate = await prompt(`  Sandbox '${sandboxName}' already exists. Recreate? [y/N]: `);
-    if (recreate.toLowerCase() !== "y") {
-      console.log("  Keeping existing sandbox.");
-      return sandboxName;
+    if (isNonInteractive()) {
+      console.log(`  [non-interactive] Sandbox '${sandboxName}' exists — recreating`);
+    } else {
+      const recreate = await prompt(`  Sandbox '${sandboxName}' already exists. Recreate? [y/N]: `);
+      if (recreate.toLowerCase() !== "y") {
+        console.log("  Keeping existing sandbox.");
+        return sandboxName;
+      }
     }
     // Destroy old sandbox
     run(`openshell sandbox delete "${sandboxName}" 2>/dev/null || true`, { ignoreError: true });
@@ -270,17 +299,26 @@ async function setupNim(sandboxName, gpu) {
   }
 
   if (options.length > 1) {
-    console.log("");
-    console.log("  Inference options:");
-    options.forEach((o, i) => {
-      console.log(`    ${i + 1}) ${o.label}`);
-    });
-    console.log("");
+    let selected;
 
-    const defaultIdx = options.findIndex((o) => o.key === "cloud") + 1;
-    const choice = await prompt(`  Choose [${defaultIdx}]: `);
-    const idx = parseInt(choice || String(defaultIdx), 10) - 1;
-    const selected = options[idx] || options[defaultIdx - 1];
+    if (isNonInteractive()) {
+      // In non-interactive mode, use NEMOCLAW_PROVIDER env var or default to cloud
+      const providerKey = process.env.NEMOCLAW_PROVIDER || "cloud";
+      selected = options.find((o) => o.key === providerKey) || options.find((o) => o.key === "cloud");
+      console.log(`  [non-interactive] Provider: ${selected.key}`);
+    } else {
+      console.log("");
+      console.log("  Inference options:");
+      options.forEach((o, i) => {
+        console.log(`    ${i + 1}) ${o.label}`);
+      });
+      console.log("");
+
+      const defaultIdx = options.findIndex((o) => o.key === "cloud") + 1;
+      const choice = await prompt(`  Choose [${defaultIdx}]: `);
+      const idx = parseInt(choice || String(defaultIdx), 10) - 1;
+      selected = options[idx] || options[defaultIdx - 1];
+    }
 
     if (selected.key === "nim") {
       // List models that fit GPU VRAM
@@ -288,16 +326,23 @@ async function setupNim(sandboxName, gpu) {
       if (models.length === 0) {
         console.log("  No NIM models fit your GPU VRAM. Falling back to cloud API.");
       } else {
-        console.log("");
-        console.log("  Models that fit your GPU:");
-        models.forEach((m, i) => {
-          console.log(`    ${i + 1}) ${m.name} (min ${m.minGpuMemoryMB} MB)`);
-        });
-        console.log("");
+        let sel;
+        if (isNonInteractive()) {
+          const envModel = process.env.NEMOCLAW_MODEL;
+          sel = envModel ? models.find((m) => m.name === envModel) || models[0] : models[0];
+          console.log(`  [non-interactive] NIM model: ${sel.name}`);
+        } else {
+          console.log("");
+          console.log("  Models that fit your GPU:");
+          models.forEach((m, i) => {
+            console.log(`    ${i + 1}) ${m.name} (min ${m.minGpuMemoryMB} MB)`);
+          });
+          console.log("");
 
-        const modelChoice = await prompt(`  Choose model [1]: `);
-        const midx = parseInt(modelChoice || "1", 10) - 1;
-        const sel = models[midx] || models[0];
+          const modelChoice = await prompt(`  Choose model [1]: `);
+          const midx = parseInt(modelChoice || "1", 10) - 1;
+          sel = models[midx] || models[0];
+        }
         model = sel.name;
 
         console.log(`  Pulling NIM image for ${model}...`);
@@ -342,8 +387,17 @@ async function setupNim(sandboxName, gpu) {
   }
 
   if (provider === "nvidia-nim") {
-    await ensureApiKey();
-    model = model || "nvidia/nemotron-3-super-120b-a12b";
+    if (isNonInteractive()) {
+      // In non-interactive mode, NVIDIA_API_KEY must be set via env var
+      if (!process.env.NVIDIA_API_KEY) {
+        console.error("  NVIDIA_API_KEY is required for cloud provider in non-interactive mode.");
+        console.error("  Set it via: NVIDIA_API_KEY=nvapi-... nemoclaw onboard --non-interactive");
+        process.exit(1);
+      }
+    } else {
+      await ensureApiKey();
+    }
+    model = model || process.env.NEMOCLAW_MODEL || "nvidia/nemotron-3-super-120b-a12b";
     console.log(`  Using NVIDIA Cloud API with model: ${model}`);
   }
 
@@ -447,24 +501,31 @@ async function setupPolicies(sandboxName) {
   });
   console.log("");
 
-  const answer = await prompt(`  Apply suggested presets (${suggestions.join(", ")})? [Y/n/list]: `);
-
-  if (answer.toLowerCase() === "n") {
-    console.log("  Skipping policy presets.");
-    return;
-  }
-
-  if (answer.toLowerCase() === "list") {
-    // Let user pick
-    const picks = await prompt("  Enter preset names (comma-separated): ");
-    const selected = picks.split(",").map((s) => s.trim()).filter(Boolean);
-    for (const name of selected) {
+  if (isNonInteractive()) {
+    console.log(`  [non-interactive] Applying suggested presets: ${suggestions.join(", ")}`);
+    for (const name of suggestions) {
       policies.applyPreset(sandboxName, name);
     }
   } else {
-    // Apply suggested
-    for (const name of suggestions) {
-      policies.applyPreset(sandboxName, name);
+    const answer = await prompt(`  Apply suggested presets (${suggestions.join(", ")})? [Y/n/list]: `);
+
+    if (answer.toLowerCase() === "n") {
+      console.log("  Skipping policy presets.");
+      return;
+    }
+
+    if (answer.toLowerCase() === "list") {
+      // Let user pick
+      const picks = await prompt("  Enter preset names (comma-separated): ");
+      const selected = picks.split(",").map((s) => s.trim()).filter(Boolean);
+      for (const name of selected) {
+        policies.applyPreset(sandboxName, name);
+      }
+    } else {
+      // Apply suggested
+      for (const name of suggestions) {
+        policies.applyPreset(sandboxName, name);
+      }
     }
   }
 
@@ -497,9 +558,12 @@ function printDashboard(sandboxName, model, provider) {
 
 // ── Main ─────────────────────────────────────────────────────────
 
-async function onboard() {
+async function onboard(opts = {}) {
+  NON_INTERACTIVE = opts.nonInteractive || process.env.NEMOCLAW_NON_INTERACTIVE === "1";
+
   console.log("");
   console.log("  NemoClaw Onboarding");
+  if (isNonInteractive()) console.log("  (non-interactive mode)");
   console.log("  ===================");
 
   const gpu = await preflight();
