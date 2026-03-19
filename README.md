@@ -22,7 +22,8 @@ NVIDIA NemoClaw is an open source stack that simplifies running [OpenClaw](https
 
 Follow these steps to get started with NemoClaw and your first sandboxed OpenClaw agent.
 
-> [!NOTE]
+> **ℹ️ Note**
+>
 > NemoClaw creates a fresh OpenClaw instance inside the sandbox during onboarding.
 
 <!-- start-quickstart-guide -->
@@ -60,7 +61,8 @@ The sandbox image is approximately 2.4 GB compressed. During image push, the Doc
 | macOS | Podman | Not supported yet. NemoClaw currently depends on OpenShell support for Podman on macOS. |
 | Windows WSL | Docker Desktop (WSL backend) | Supported target path |
 
-> [!TIP]
+> **💡 Tip**
+>
 > For DGX Spark, follow the [DGX Spark setup guide](https://github.com/NVIDIA/NemoClaw/blob/main/spark-install.md). It covers Spark-specific prerequisites, such as cgroup v2 and Docker configuration, before running the standard installer.
 
 ### Install NemoClaw and Onboard OpenClaw Agent
@@ -108,7 +110,8 @@ sandbox@my-assistant:~$ openclaw tui
 
 Send a test message to the agent and verify you receive a response.
 
-> [!NOTE]
+> **ℹ️ Note**
+>
 > The TUI is best for interactive back-and-forth. If you need the full text of a long response (for example, large code generation output), use the CLI instead:
 >
 > ```console
