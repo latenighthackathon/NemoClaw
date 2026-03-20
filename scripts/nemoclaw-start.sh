@@ -82,55 +82,6 @@ os.chmod(path, 0o600)
 PYAUTH
 }
 
-lock_gateway_config() {
-  # Lock openclaw.json so the sandboxed agent cannot modify auth tokens,
-  # CORS origins, or other gateway security settings.  Uses a narrow
-  # sudoers entry to escalate to root for the chown/chmod only.
-  #
-  # Polls up to 30s for the gateway to write its auth token before locking.
-  # If the token never appears, skips locking so the gateway can still write.
-  # Ref: https://github.com/NVIDIA/NemoClaw/issues/514
-  local config_path token_found
-  config_path="${HOME:-/sandbox}/.openclaw/openclaw.json"
-  token_found=false
-
-  if [ ! -f "$config_path" ]; then
-    return
-  fi
-
-  # Already locked from a previous run (container restart).  The sudoers
-  # entry is gone too, so skip gracefully.
-  if [ ! -w "$config_path" ]; then
-    echo "[security] gateway config already locked: $config_path"
-    return
-  fi
-
-  # Wait for the gateway to finish its initial config write (token generation).
-  # If the token never appears after 30s, skip locking so the gateway can
-  # still write it — locking without the token would cause a permanent
-  # auth failure.
-  local i
-  for i in $(seq 1 30); do
-    if python3 -c "
-import json, sys
-cfg = json.load(open('$config_path'))
-sys.exit(0 if cfg.get('gateway',{}).get('auth',{}).get('token') else 1)
-" 2>/dev/null; then
-      token_found=true
-      break
-    fi
-    sleep 1
-  done
-
-  if [ "$token_found" = "false" ]; then
-    echo "[security] WARNING: gateway token not found after 30s, skipping config lock to avoid auth failure: $config_path" >&2
-    return
-  fi
-
-  sudo /usr/local/bin/lock-gateway-config
-  echo "[security] gateway config locked: $config_path"
-}
-
 print_dashboard_urls() {
   local token chat_ui_base local_url remote_url
 
@@ -235,4 +186,3 @@ nohup openclaw gateway run > /tmp/gateway.log 2>&1 &
 echo "[gateway] openclaw gateway launched (pid $!)"
 start_auto_pair
 print_dashboard_urls
-lock_gateway_config
