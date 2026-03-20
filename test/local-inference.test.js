@@ -20,6 +20,13 @@ const {
 } = require("../bin/lib/local-inference");
 
 describe("local inference helpers", () => {
+  it("returns the expected base URL for nim-local", () => {
+    assert.equal(
+      getLocalProviderBaseUrl("nim-local"),
+      "http://host.openshell.internal:8000/v1",
+    );
+  });
+
   it("returns the expected base URL for vllm-local", () => {
     assert.equal(
       getLocalProviderBaseUrl("vllm-local"),
@@ -38,6 +45,13 @@ describe("local inference helpers", () => {
     assert.equal(
       getLocalProviderHealthCheck("ollama-local"),
       "curl -sf http://localhost:11434/api/tags 2>/dev/null",
+    );
+  });
+
+  it("returns the expected health check command for nim-local", () => {
+    assert.equal(
+      getLocalProviderHealthCheck("nim-local"),
+      "curl -sf http://localhost:8000/v1/models 2>/dev/null",
     );
   });
 
@@ -77,6 +91,12 @@ describe("local inference helpers", () => {
 
   it("returns a clear error when vllm-local is unavailable", () => {
     const result = validateLocalProvider("vllm-local", () => "");
+    assert.equal(result.ok, false);
+    assert.match(result.message, /http:\/\/localhost:8000/);
+  });
+
+  it("returns a clear error when nim-local is unavailable", () => {
+    const result = validateLocalProvider("nim-local", () => "");
     assert.equal(result.ok, false);
     assert.match(result.message, /http:\/\/localhost:8000/);
   });

@@ -7,6 +7,7 @@ const DEFAULT_OLLAMA_MODEL = "nemotron-3-nano:30b";
 
 function getLocalProviderBaseUrl(provider) {
   switch (provider) {
+    case "nim-local":
     case "vllm-local":
       return `${HOST_GATEWAY_URL}:8000/v1`;
     case "ollama-local":
@@ -18,6 +19,7 @@ function getLocalProviderBaseUrl(provider) {
 
 function getLocalProviderHealthCheck(provider) {
   switch (provider) {
+    case "nim-local":
     case "vllm-local":
       return "curl -sf http://localhost:8000/v1/models 2>/dev/null";
     case "ollama-local":
@@ -29,6 +31,7 @@ function getLocalProviderHealthCheck(provider) {
 
 function getLocalProviderContainerReachabilityCheck(provider) {
   switch (provider) {
+    case "nim-local":
     case "vllm-local":
       return `docker run --rm --add-host host.openshell.internal:host-gateway ${CONTAINER_REACHABILITY_IMAGE} -sf http://host.openshell.internal:8000/v1/models 2>/dev/null`;
     case "ollama-local":
@@ -47,6 +50,11 @@ function validateLocalProvider(provider, runCapture) {
   const output = runCapture(command, { ignoreError: true });
   if (!output) {
     switch (provider) {
+      case "nim-local":
+        return {
+          ok: false,
+          message: "Local NIM was selected, but nothing is responding on http://localhost:8000.",
+        };
       case "vllm-local":
         return {
           ok: false,
@@ -73,6 +81,12 @@ function validateLocalProvider(provider, runCapture) {
   }
 
   switch (provider) {
+    case "nim-local":
+      return {
+        ok: false,
+        message:
+          "Local NIM is responding on localhost, but containers cannot reach http://host.openshell.internal:8000. Ensure the NIM container publishes port 8000 and the host gateway alias is available to sandboxes.",
+      };
     case "vllm-local":
       return {
         ok: false,

@@ -3,8 +3,11 @@
 //
 // NIM container management — pull, start, stop, health-check NIM images.
 
-const { run, runCapture } = require("./runner");
+const runner = require("./runner");
 const nimImages = require("./nim-images.json");
+const MODEL_PULL_ALIASES = {
+  "nvidia/nemotron-3-nano-30b-a3b": ["nvcr.io/nim/nvidia/nemotron-3-nano:latest"],
+};
 
 function containerName(sandboxName) {
   return `nemoclaw-nim-${sandboxName}`;
@@ -13,6 +16,29 @@ function containerName(sandboxName) {
 function getImageForModel(modelName) {
   const entry = nimImages.models.find((m) => m.name === modelName);
   return entry ? entry.image : null;
+}
+
+function getPullCandidatesForModel(modelName) {
+  const primary = getImageForModel(modelName);
+  if (!primary) return [];
+  return [primary, ...(MODEL_PULL_ALIASES[modelName] || [])];
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function getContainerCredentialArgs() {
+  const args = [];
+  const nvidiaApiKey = (process.env.NVIDIA_API_KEY || "").trim();
+  const ngcApiKey = (process.env.NGC_API_KEY || "").trim() || nvidiaApiKey;
+  if (nvidiaApiKey) {
+    args.push(`-e NVIDIA_API_KEY=${shellQuote(nvidiaApiKey)}`);
+  }
+  if (ngcApiKey) {
+    args.push(`-e NGC_API_KEY=${shellQuote(ngcApiKey)}`);
+  }
+  return args;
 }
 
 function listModels() {
@@ -26,7 +52,7 @@ function listModels() {
 function detectGpu() {
   // Try NVIDIA first — query VRAM
   try {
-    const output = runCapture(
+    const output = runner.runCapture(
       "nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits",
       { ignoreError: true }
     );
@@ -48,7 +74,7 @@ function detectGpu() {
 
   // Fallback: DGX Spark (GB10) — VRAM not queryable due to unified memory architecture
   try {
-    const nameOutput = runCapture(
+    const nameOutput = runner.runCapture(
       "nvidia-smi --query-gpu=name --format=csv,noheader,nounits",
       { ignoreError: true }
     );
@@ -56,7 +82,7 @@ function detectGpu() {
       // GB10 has 128GB unified memory shared with Grace CPU — use system RAM
       let totalMemoryMB = 0;
       try {
-        const memLine = runCapture("free -m | awk '/Mem:/ {print $2}'", { ignoreError: true });
+        const memLine = runner.runCapture("free -m | awk '/Mem:/ {print $2}'", { ignoreError: true });
         if (memLine) totalMemoryMB = parseInt(memLine.trim(), 10) || 0;
       } catch {}
       return {
@@ -73,7 +99,7 @@ function detectGpu() {
   // macOS: detect Apple Silicon or discrete GPU
   if (process.platform === "darwin") {
     try {
-      const spOutput = runCapture(
+      const spOutput = runner.runCapture(
         "system_profiler SPDisplaysDataType 2>/dev/null",
         { ignoreError: true }
       );
@@ -92,7 +118,7 @@ function detectGpu() {
           } else {
             // Apple Silicon shares system RAM — read total memory
             try {
-              const memBytes = runCapture("sysctl -n hw.memsize", { ignoreError: true });
+              const memBytes = runner.runCapture("sysctl -n hw.memsize", { ignoreError: true });
               if (memBytes) memoryMB = Math.floor(parseInt(memBytes, 10) / 1024 / 1024);
             } catch {}
           }
@@ -115,30 +141,44 @@ function detectGpu() {
 }
 
 function pullNimImage(model) {
-  const image = getImageForModel(model);
-  if (!image) {
+  const images = getPullCandidatesForModel(model);
+  if (images.length === 0) {
     console.error(`  Unknown model: ${model}`);
     process.exit(1);
   }
-  console.log(`  Pulling NIM image: ${image}`);
-  run(`docker pull ${image}`);
-  return image;
+
+  let lastError = null;
+  for (const image of images) {
+    try {
+      console.log(`  Pulling NIM image: ${image}`);
+      runner.run(`docker pull ${image}`);
+      return image;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  return null;
 }
 
-function startNimContainer(sandboxName, model, port = 8000) {
+function startNimContainer(sandboxName, model, port = 8000, imageOverride = null) {
   const name = containerName(sandboxName);
-  const image = getImageForModel(model);
+  const image = imageOverride || getImageForModel(model);
   if (!image) {
     console.error(`  Unknown model: ${model}`);
     process.exit(1);
   }
 
   // Stop any existing container with same name
-  run(`docker rm -f ${name} 2>/dev/null || true`, { ignoreError: true });
+  runner.run(`docker rm -f ${name} 2>/dev/null || true`, { ignoreError: true });
 
   console.log(`  Starting NIM container: ${name}`);
-  run(
-    `docker run -d --gpus all -p ${port}:8000 --name ${name} --shm-size 16g ${image}`
+  const envArgs = getContainerCredentialArgs();
+  runner.run(
+    `docker run -d --gpus all -p ${port}:8000 --name ${name} --shm-size 16g ${envArgs.join(" ")} ${image}`.trim()
   );
   return name;
 }
@@ -150,7 +190,7 @@ function waitForNimHealth(port = 8000, timeout = 300) {
 
   while ((Date.now() - start) / 1000 < timeout) {
     try {
-      const result = runCapture(`curl -sf http://localhost:${port}/v1/models`, {
+      const result = runner.runCapture(`curl -sf http://localhost:${port}/v1/models`, {
         ignoreError: true,
       });
       if (result) {
@@ -168,14 +208,14 @@ function waitForNimHealth(port = 8000, timeout = 300) {
 function stopNimContainer(sandboxName) {
   const name = containerName(sandboxName);
   console.log(`  Stopping NIM container: ${name}`);
-  run(`docker stop ${name} 2>/dev/null || true`, { ignoreError: true });
-  run(`docker rm ${name} 2>/dev/null || true`, { ignoreError: true });
+  runner.run(`docker stop ${name} 2>/dev/null || true`, { ignoreError: true });
+  runner.run(`docker rm ${name} 2>/dev/null || true`, { ignoreError: true });
 }
 
 function nimStatus(sandboxName) {
   const name = containerName(sandboxName);
   try {
-    const state = runCapture(
+    const state = runner.runCapture(
       `docker inspect --format '{{.State.Status}}' ${name} 2>/dev/null`,
       { ignoreError: true }
     );
@@ -183,7 +223,7 @@ function nimStatus(sandboxName) {
 
     let healthy = false;
     if (state === "running") {
-      const health = runCapture(`curl -sf http://localhost:8000/v1/models 2>/dev/null`, {
+      const health = runner.runCapture(`curl -sf http://localhost:8000/v1/models 2>/dev/null`, {
         ignoreError: true,
       });
       healthy = !!health;

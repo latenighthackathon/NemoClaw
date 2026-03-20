@@ -650,10 +650,10 @@ async function setupNim(sandboxName, gpu) {
         model = sel.name;
 
         console.log(`  Pulling NIM image for ${model}...`);
-        nim.pullNimImage(model);
+        const resolvedImage = nim.pullNimImage(model);
 
         console.log("  Starting NIM container...");
-        nimContainer = nim.startNimContainer(sandboxName, model);
+        nimContainer = nim.startNimContainer(sandboxName, model, 8000, resolvedImage);
 
         console.log("  Waiting for NIM to become healthy...");
         if (!nim.waitForNimHealth()) {
@@ -661,7 +661,7 @@ async function setupNim(sandboxName, gpu) {
           model = null;
           nimContainer = null;
         } else {
-          provider = "vllm-local";
+          provider = "nim-local";
         }
       }
     } else if (selected.key === "ollama") {
@@ -734,6 +734,25 @@ async function setupInference(sandboxName, model, provider) {
     );
     run(
       `openshell inference set --no-verify --provider nvidia-nim --model ${model} 2>/dev/null || true`,
+      { ignoreError: true }
+    );
+  } else if (provider === "nim-local") {
+    const validation = validateLocalProvider(provider, runCapture);
+    if (!validation.ok) {
+      console.error(`  ${validation.message}`);
+      process.exit(1);
+    }
+    const baseUrl = getLocalProviderBaseUrl(provider);
+    run(
+      `openshell provider create --name nim-local --type openai ` +
+      `--credential "OPENAI_API_KEY=dummy" ` +
+      `--config "OPENAI_BASE_URL=${baseUrl}" 2>&1 || ` +
+      `openshell provider update nim-local --credential "OPENAI_API_KEY=dummy" ` +
+      `--config "OPENAI_BASE_URL=${baseUrl}" 2>&1 || true`,
+      { ignoreError: true }
+    );
+    run(
+      `openshell inference set --no-verify --provider nim-local --model ${model} 2>/dev/null || true`,
       { ignoreError: true }
     );
   } else if (provider === "vllm-local") {

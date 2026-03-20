@@ -3,6 +3,7 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const path = require("node:path");
 
 const nim = require("../bin/lib/nim");
 
@@ -32,6 +33,35 @@ describe("nim", () => {
 
     it("returns null for unknown model", () => {
       assert.equal(nim.getImageForModel("bogus/model"), null);
+    });
+  });
+
+  describe("pullNimImage", () => {
+    it("falls back to the alternate nano image when the primary pull is denied", () => {
+      const runnerPath = path.join(__dirname, "..", "bin", "lib", "runner.js");
+      const originalRun = require(runnerPath).run;
+      const runner = require(runnerPath);
+      const commands = [];
+      runner.run = (command) => {
+        commands.push(command);
+        if (command.includes("nemotron-3-nano-30b-a3b:latest")) {
+          throw new Error("denied");
+        }
+      };
+
+      try {
+        assert.equal(
+          nim.pullNimImage("nvidia/nemotron-3-nano-30b-a3b"),
+          "nvcr.io/nim/nvidia/nemotron-3-nano:latest"
+        );
+      } finally {
+        runner.run = originalRun;
+      }
+
+      assert.deepEqual(commands, [
+        "docker pull nvcr.io/nim/nvidia/nemotron-3-nano-30b-a3b:latest",
+        "docker pull nvcr.io/nim/nvidia/nemotron-3-nano:latest",
+      ]);
     });
   });
 

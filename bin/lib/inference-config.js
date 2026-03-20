@@ -40,6 +40,17 @@ function getProviderSelectionConfig(provider, model) {
         provider,
         providerLabel: "Local vLLM",
       };
+    case "nim-local":
+      return {
+        endpointType: "custom",
+        endpointUrl: INFERENCE_ROUTE_URL,
+        ncpPartner: null,
+        model: model || "nvidia/nemotron-3-nano-30b-a3b",
+        profile: DEFAULT_ROUTE_PROFILE,
+        credentialEnv: DEFAULT_ROUTE_CREDENTIAL_ENV,
+        provider,
+        providerLabel: "Local NIM",
+      };
     case "ollama-local":
       return {
         endpointType: "custom",
