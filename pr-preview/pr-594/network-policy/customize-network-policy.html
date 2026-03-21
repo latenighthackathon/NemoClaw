@@ -416,8 +416,9 @@
 -->
 <section class="tex2jax_ignore mathjax_ignore" id="customize-the-sandbox-network-policy">
 <h1>Customize the Sandbox Network Policy<a class="headerlink" href="#customize-the-sandbox-network-policy" title="Link to this heading">#</a></h1>
-<p>Add, remove, or modify the endpoints that the sandbox is allowed to reach.
-NemoClaw supports both static policy changes that persist across restarts and dynamic updates to a running sandbox.</p>
+<p>Add, remove, or modify the endpoints that the sandbox is allowed to reach.</p>
+<p>The sandbox policy is defined in a declarative YAML file in the NemoClaw repository and enforced at runtime by <a class="reference external" href="https://github.com/NVIDIA/OpenShell" rel="noreferer noopener" target="_blank">NVIDIA OpenShell</a>.
+NemoClaw supports both static policy changes that persist across restarts and dynamic updates applied to a running sandbox through the OpenShell CLI.</p>
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
 <ul class="simple">
@@ -480,11 +481,61 @@ When the sandbox stops, the running policy resets to the baseline defined in the
 To make changes permanent, update the static policy file and re-run setup.</p>
 </section>
 </section>
+<section id="policy-presets">
+<h2>Policy Presets<a class="headerlink" href="#policy-presets" title="Link to this heading">#</a></h2>
+<p>NemoClaw ships preset policy files for common integrations in <code class="docutils literal notranslate"><span class="pre">nemoclaw-blueprint/policies/presets/</span></code>.
+Apply a preset as-is or use it as a starting template for a custom policy.</p>
+<p>Available presets:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Preset</p></th>
+<th class="head"><p>Endpoints</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">discord</span></code></p></td>
+<td><p>Discord webhook API</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docker</span></code></p></td>
+<td><p>Docker Hub, NVIDIA container registry</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">huggingface</span></code></p></td>
+<td><p>Hugging Face model registry</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">jira</span></code></p></td>
+<td><p>Atlassian Jira API</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">npm</span></code></p></td>
+<td><p>npm and Yarn registries</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">outlook</span></code></p></td>
+<td><p>Microsoft 365 and Outlook</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pypi</span></code></p></td>
+<td><p>Python Package Index</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">slack</span></code></p></td>
+<td><p>Slack API and webhooks</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">telegram</span></code></p></td>
+<td><p>Telegram Bot API</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>To apply a preset to a running sandbox, pass it as a policy file:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>openshell<span class="w"> </span>policy<span class="w"> </span><span class="nb">set</span><span class="w"> </span>nemoclaw-blueprint/policies/presets/pypi.yaml
+</pre></div>
+</div>
+<p>To include a preset in the baseline, merge its entries into <code class="docutils literal notranslate"><span class="pre">openclaw-sandbox.yaml</span></code> and re-run <code class="docutils literal notranslate"><span class="pre">nemoclaw</span> <span class="pre">onboard</span></code>.</p>
+</section>
 <section id="related-topics">
 <h2>Related Topics<a class="headerlink" href="#related-topics" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="approve-network-requests.html"><span class="std std-doc">Approve or Deny Agent Network Requests</span></a> for real-time operator approval.</p></li>
 <li><p><a class="reference internal" href="../reference/network-policies.html"><span class="std std-doc">Network Policies</span></a> for the full baseline policy reference.</p></li>
+<li><p>OpenShell <a class="reference external" href="https://github.com/NVIDIA/OpenShell/blob/main/docs/reference/policy-schema.md" rel="noreferer noopener" target="_blank">Policy Schema</a> for the full YAML policy schema reference.</p></li>
+<li><p>OpenShell <a class="reference external" href="https://github.com/NVIDIA/OpenShell/blob/main/docs/sandboxes/policies.md" rel="noreferer noopener" target="_blank">Sandbox Policies</a> for applying, iterating, and debugging policies at the OpenShell layer.</p></li>
 </ul>
 </section>
 </section>
@@ -551,6 +602,7 @@ To make changes permanent, update the static policy file and re-run setup.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#scope-of-dynamic-changes">Scope of Dynamic Changes</a></li>
 </ul>
 </li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#policy-presets">Policy Presets</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#related-topics">Related Topics</a></li>
 </ul>
   </nav></div>
