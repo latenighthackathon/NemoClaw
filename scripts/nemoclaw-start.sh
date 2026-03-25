@@ -24,7 +24,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 # own name as $1 would cause infinite recursion via the NEMOCLAW_CMD exec path.
 # Only strip from $1 — later args with this name are legitimate user arguments.
 case "${1:-}" in
-  nemoclaw-start | /usr/local/bin/nemoclaw-start) shift ;;
+nemoclaw-start | /usr/local/bin/nemoclaw-start) shift ;;
 esac
 NEMOCLAW_CMD=("$@")
 CHAT_UI_URL="${CHAT_UI_URL:-http://127.0.0.1:18789}"
@@ -169,6 +169,32 @@ PYAUTOPAIR
 
 echo 'Setting up NemoClaw...'
 [ -f .env ] && chmod 600 .env
+
+# ── Non-root fallback ──────────────────────────────────────────
+# OpenShell runs containers with --security-opt=no-new-privileges, which
+# blocks gosu's setuid syscall. When we're not root, skip privilege
+# separation and run everything as the current user (sandbox).
+# Gateway process isolation is not available in this mode.
+if [ "$(id -u)" -ne 0 ]; then
+  echo "[gateway] Running as non-root (uid=$(id -u)) — privilege separation disabled"
+  verify_config_integrity || true
+  write_auth_profile
+
+  if [ ${#NEMOCLAW_CMD[@]} -gt 0 ]; then
+    exec "${NEMOCLAW_CMD[@]}"
+  fi
+
+  # Start gateway in background, auto-pair, then wait
+  "$OPENCLAW" gateway run &
+  GATEWAY_PID=$!
+  echo "[gateway] openclaw gateway launched (pid $GATEWAY_PID)"
+  start_auto_pair
+  print_dashboard_urls
+  wait "$GATEWAY_PID"
+  exit $?
+fi
+
+# ── Root path (full privilege separation via gosu) ─────────────
 
 # Verify config integrity before starting anything
 verify_config_integrity
