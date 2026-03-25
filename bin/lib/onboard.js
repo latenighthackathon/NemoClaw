@@ -208,6 +208,16 @@ function streamSandboxCreate(command, env = process.env, options = {}) {
     resolvePromise(result);
   }
 
+  function detachChild() {
+    child.stdout?.removeAllListeners?.("data");
+    child.stderr?.removeAllListeners?.("data");
+    child.stdout?.destroy?.();
+    child.stderr?.destroy?.();
+    child.removeAllListeners?.("error");
+    child.removeAllListeners?.("close");
+    child.unref?.();
+  }
+
   function shouldShowLine(line) {
     return (
       /^ {2}Building image /.test(line) ||
@@ -269,6 +279,7 @@ function streamSandboxCreate(command, env = process.env, options = {}) {
           } catch {
             // Best effort only — the child may have already exited.
           }
+          detachChild();
           finish({ status: 0, output: lines.join("\n"), sawProgress: true, forcedReady: true });
         } finally {
           polling = false;

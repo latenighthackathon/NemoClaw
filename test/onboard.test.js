@@ -578,6 +578,18 @@ childProcess.spawn = (...args) => {
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   child.killCalls = [];
+  child.unrefCalls = 0;
+  child.stdout.destroyCalls = 0;
+  child.stderr.destroyCalls = 0;
+  child.stdout.destroy = () => {
+    child.stdout.destroyCalls += 1;
+  };
+  child.stderr.destroy = () => {
+    child.stderr.destroyCalls += 1;
+  };
+  child.unref = () => {
+    child.unrefCalls += 1;
+  };
   child.kill = (signal) => {
     child.killCalls.push(signal);
     process.nextTick(() => child.emit("close", signal === "SIGTERM" ? 0 : 1));
@@ -600,6 +612,9 @@ const { createSandbox } = require(${onboardPath});
     sandboxName,
     sandboxListCalls,
     killCalls: createCommand.child.killCalls,
+    unrefCalls: createCommand.child.unrefCalls,
+    stdoutDestroyCalls: createCommand.child.stdout.destroyCalls,
+    stderrDestroyCalls: createCommand.child.stderr.destroyCalls,
   }));
   clearInterval(keepAlive);
 })().catch((error) => {
@@ -627,6 +642,9 @@ const { createSandbox } = require(${onboardPath});
     assert.equal(payload.sandboxName, "my-assistant");
     assert.ok(payload.sandboxListCalls >= 2);
     assert.deepEqual(payload.killCalls, ["SIGTERM"]);
+    assert.equal(payload.unrefCalls, 1);
+    assert.equal(payload.stdoutDestroyCalls, 1);
+    assert.equal(payload.stderrDestroyCalls, 1);
   });
 
   it("accepts gateway inference when system inference is separately not configured", () => {
