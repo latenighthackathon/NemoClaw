@@ -927,9 +927,7 @@ console.log(JSON.stringify({ liveExists, sandbox: registry.getSandbox("my-assist
     const payloadLine = result.stdout
       .trim()
       .split("\n")
-      .slice()
-      .reverse()
-      .find((line) => line.startsWith("{") && line.endsWith("}"));
+      .findLast((line) => line.startsWith("{") && line.endsWith("}"));
     assert.ok(payloadLine, `expected JSON payload in stdout:\n${result.stdout}`);
     const payload = JSON.parse(payloadLine);
     assert.equal(payload.liveExists, false);
@@ -1013,9 +1011,7 @@ const { createSandbox } = require(${onboardPath});
     const payloadLine = result.stdout
       .trim()
       .split("\n")
-      .slice()
-      .reverse()
-      .find((line) => line.startsWith("{") && line.endsWith("}"));
+      .findLast((line) => line.startsWith("{") && line.endsWith("}"));
     assert.ok(payloadLine, `expected JSON payload in stdout:\n${result.stdout}`);
     const payload = JSON.parse(payloadLine);
     assert.equal(payload.sandboxName, "my-assistant");
