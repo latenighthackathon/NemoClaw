@@ -94,6 +94,7 @@ function validateStep(step) {
   return true;
 }
 
+// eslint-disable-next-line complexity
 function normalizeSession(data) {
   if (!isObject(data) || data.version !== SESSION_VERSION) return null;
   const normalized = createSession({
