@@ -94,6 +94,25 @@ function validateStep(step) {
   return true;
 }
 
+function redactUrl(value) {
+  if (typeof value !== "string" || value.length === 0) return null;
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) {
+      url.username = "";
+      url.password = "";
+    }
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^(signature|sig|token|auth|access_token)$/i.test(key)) {
+        url.searchParams.set(key, "<REDACTED>");
+      }
+    }
+    return url.toString();
+  } catch {
+    return redactSensitiveText(value);
+  }
+}
+
 // eslint-disable-next-line complexity
 function normalizeSession(data) {
   if (!isObject(data) || data.version !== SESSION_VERSION) return null;
@@ -105,7 +124,7 @@ function normalizeSession(data) {
     sandboxName: typeof data.sandboxName === "string" ? data.sandboxName : null,
     provider: typeof data.provider === "string" ? data.provider : null,
     model: typeof data.model === "string" ? data.model : null,
-    endpointUrl: typeof data.endpointUrl === "string" ? data.endpointUrl : null,
+    endpointUrl: typeof data.endpointUrl === "string" ? redactUrl(data.endpointUrl) : null,
     credentialEnv: typeof data.credentialEnv === "string" ? data.credentialEnv : null,
     preferredInferenceApi: typeof data.preferredInferenceApi === "string" ? data.preferredInferenceApi : null,
     nimContainer: typeof data.nimContainer === "string" ? data.nimContainer : null,
@@ -216,7 +235,18 @@ function acquireOnboardLock(command = null) {
         throw error;
       }
 
-      const existing = parseLockFile(fs.readFileSync(LOCK_FILE, "utf8"));
+      let existing;
+      try {
+        existing = parseLockFile(fs.readFileSync(LOCK_FILE, "utf8"));
+      } catch (readError) {
+        if (readError?.code === "ENOENT") {
+          continue;
+        }
+        throw readError;
+      }
+      if (!existing) {
+        continue;
+      }
       if (existing && isProcessAlive(existing.pid)) {
         return {
           acquired: false,
@@ -244,8 +274,15 @@ function acquireOnboardLock(command = null) {
 function releaseOnboardLock() {
   try {
     if (!fs.existsSync(LOCK_FILE)) return;
-    const existing = parseLockFile(fs.readFileSync(LOCK_FILE, "utf8"));
-    if (existing && existing.pid !== process.pid) return;
+    let existing = null;
+    try {
+      existing = parseLockFile(fs.readFileSync(LOCK_FILE, "utf8"));
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+    if (!existing) return;
+    if (existing.pid !== process.pid) return;
     fs.unlinkSync(LOCK_FILE);
   } catch {
     return;
@@ -306,6 +343,7 @@ function completeSession(updates = {}) {
   return updateSession((session) => {
     Object.assign(session, filterSafeUpdates(updates));
     session.status = "complete";
+    session.resumable = false;
     session.failure = null;
     return session;
   });
@@ -317,7 +355,7 @@ function filterSafeUpdates(updates) {
   if (typeof updates.sandboxName === "string") safe.sandboxName = updates.sandboxName;
   if (typeof updates.provider === "string") safe.provider = updates.provider;
   if (typeof updates.model === "string") safe.model = updates.model;
-  if (typeof updates.endpointUrl === "string") safe.endpointUrl = updates.endpointUrl;
+  if (typeof updates.endpointUrl === "string") safe.endpointUrl = redactUrl(updates.endpointUrl);
   if (typeof updates.credentialEnv === "string") safe.credentialEnv = updates.credentialEnv;
   if (typeof updates.preferredInferenceApi === "string") safe.preferredInferenceApi = updates.preferredInferenceApi;
   if (typeof updates.nimContainer === "string") safe.nimContainer = updates.nimContainer;
@@ -346,7 +384,7 @@ function summarizeForDebug(session = loadSession()) {
     sandboxName: session.sandboxName,
     provider: session.provider,
     model: session.model,
-    endpointUrl: session.endpointUrl,
+    endpointUrl: redactUrl(session.endpointUrl),
     credentialEnv: session.credentialEnv,
     preferredInferenceApi: session.preferredInferenceApi,
     nimContainer: session.nimContainer,
@@ -382,6 +420,7 @@ module.exports = {
   markStepFailed,
   markStepStarted,
   lockPath,
+  redactUrl,
   saveSession,
   releaseOnboardLock,
   sessionPath,

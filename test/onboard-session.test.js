@@ -47,6 +47,17 @@ describe("onboard session", () => {
     expect(dirStat.mode & 0o777).toBe(0o700);
   });
 
+  it("redacts credential-bearing endpoint URLs before persisting them", () => {
+    session.saveSession(session.createSession());
+    session.markStepComplete("provider_selection", {
+      endpointUrl: "https://alice:secret@example.com/v1/models?token=abc123&sig=def456&keep=yes",
+    });
+
+    const loaded = session.loadSession();
+    expect(loaded.endpointUrl).toBe("https://example.com/v1/models?token=%3CREDACTED%3E&sig=%3CREDACTED%3E&keep=yes");
+    expect(session.summarizeForDebug().endpointUrl).toBe(loaded.endpointUrl);
+  });
+
   it("marks steps started, completed, and failed", () => {
     session.saveSession(session.createSession());
     session.markStepStarted("gateway");
@@ -132,6 +143,24 @@ describe("onboard session", () => {
     expect(written.pid).toBe(process.pid);
   });
 
+  it("treats unreadable or transient lock contents as a retry, not a stale lock", () => {
+    fs.mkdirSync(path.dirname(session.LOCK_FILE), { recursive: true });
+    fs.writeFileSync(session.LOCK_FILE, "{not-json", { mode: 0o600 });
+
+    const acquired = session.acquireOnboardLock("nemoclaw onboard --resume");
+    expect(acquired.acquired).toBe(false);
+    expect(acquired.stale).toBe(true);
+    expect(fs.existsSync(session.LOCK_FILE)).toBe(true);
+  });
+
+  it("ignores malformed lock files when releasing the onboard lock", () => {
+    fs.mkdirSync(path.dirname(session.LOCK_FILE), { recursive: true });
+    fs.writeFileSync(session.LOCK_FILE, "{not-json", { mode: 0o600 });
+
+    session.releaseOnboardLock();
+    expect(fs.existsSync(session.LOCK_FILE)).toBe(true);
+  });
+
   it("redacts sensitive values from persisted failure messages", () => {
     session.saveSession(session.createSession());
     session.markStepFailed(
@@ -153,12 +182,14 @@ describe("onboard session", () => {
     session.saveSession(session.createSession({ sandboxName: "my-assistant" }));
     session.markStepStarted("preflight");
     session.markStepComplete("preflight");
+    session.completeSession();
     const summary = session.summarizeForDebug();
 
     expect(summary.sandboxName).toBe("my-assistant");
     expect(summary.steps.preflight.status).toBe("complete");
     expect(summary.steps.preflight.startedAt).toBeTruthy();
     expect(summary.steps.preflight.completedAt).toBeTruthy();
+    expect(summary.resumable).toBe(false);
   });
 
   it("keeps debug summaries redacted when failures were sanitized", () => {
