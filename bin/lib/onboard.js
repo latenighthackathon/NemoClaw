@@ -1476,6 +1476,7 @@ function getNonInteractiveModel(providerKey) {
 
 // ── Step 1: Preflight ────────────────────────────────────────────
 
+// eslint-disable-next-line complexity
 async function preflight() {
   step(1, 7, "Preflight checks");
 
@@ -1727,6 +1728,7 @@ async function promptValidatedSandboxName() {
   return sandboxName;
 }
 
+// eslint-disable-next-line complexity
 async function createSandbox(gpu, model, provider, preferredInferenceApi = null, sandboxNameOverride = null) {
   step(5, 7, "Creating sandbox");
 
@@ -1882,6 +1884,7 @@ async function createSandbox(gpu, model, provider, preferredInferenceApi = null,
 
 // ── Step 4: NIM ──────────────────────────────────────────────────
 
+// eslint-disable-next-line complexity
 async function setupNim(gpu) {
   step(3, 7, "Configuring inference (NIM)");
 
@@ -2282,6 +2285,7 @@ async function setupNim(gpu) {
 
 // ── Step 5: Inference provider ───────────────────────────────────
 
+// eslint-disable-next-line complexity
 async function setupInference(sandboxName, model, provider, endpointUrl = null, credentialEnv = null) {
   step(4, 7, "Setting up inference provider");
   runOpenshell(["gateway", "select", GATEWAY_NAME], { ignoreError: true });
@@ -2368,6 +2372,7 @@ async function setupOpenclaw(sandboxName, model, provider) {
 
 // ── Step 7: Policy presets ───────────────────────────────────────
 
+// eslint-disable-next-line complexity
 async function _setupPolicies(sandboxName) {
   step(7, 7, "Policy presets");
 
@@ -2511,6 +2516,7 @@ function arePolicyPresetsApplied(sandboxName, selectedPresets = []) {
   return selectedPresets.every((preset) => applied.has(preset));
 }
 
+// eslint-disable-next-line complexity
 async function setupPoliciesWithSelection(sandboxName, options = {}) {
   const selectedPresets = Array.isArray(options.selectedPresets) ? options.selectedPresets : null;
   const onSelection = typeof options.onSelection === "function" ? options.onSelection : null;
@@ -2767,6 +2773,7 @@ function resumeStepMessage(stepName, detail) {
 
 // ── Main ─────────────────────────────────────────────────────────
 
+// eslint-disable-next-line complexity
 async function onboard(opts = {}) {
   NON_INTERACTIVE = opts.nonInteractive || process.env.NEMOCLAW_NON_INTERACTIVE === "1";
   delete process.env.OPENSHELL_GATEWAY;
