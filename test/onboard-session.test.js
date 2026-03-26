@@ -50,11 +50,14 @@ describe("onboard session", () => {
   it("redacts credential-bearing endpoint URLs before persisting them", () => {
     session.saveSession(session.createSession());
     session.markStepComplete("provider_selection", {
-      endpointUrl: "https://alice:secret@example.com/v1/models?token=abc123&sig=def456&keep=yes",
+      endpointUrl:
+        "https://alice:secret@example.com/v1/models?token=abc123&sig=def456&X-Amz-Signature=ghi789&keep=yes#token=frag",
     });
 
     const loaded = session.loadSession();
-    expect(loaded.endpointUrl).toBe("https://example.com/v1/models?token=%3CREDACTED%3E&sig=%3CREDACTED%3E&keep=yes");
+    expect(loaded.endpointUrl).toBe(
+      "https://example.com/v1/models?token=%3CREDACTED%3E&sig=%3CREDACTED%3E&X-Amz-Signature=%3CREDACTED%3E&keep=yes"
+    );
     expect(session.summarizeForDebug().endpointUrl).toBe(loaded.endpointUrl);
   });
 
@@ -64,15 +67,18 @@ describe("onboard session", () => {
     let loaded = session.loadSession();
     expect(loaded.steps.gateway.status).toBe("in_progress");
     expect(loaded.lastStepStarted).toBe("gateway");
+    expect(loaded.steps.gateway.completedAt).toBeNull();
 
     session.markStepComplete("gateway", { sandboxName: "my-assistant" });
     loaded = session.loadSession();
     expect(loaded.steps.gateway.status).toBe("complete");
     expect(loaded.sandboxName).toBe("my-assistant");
+    expect(loaded.steps.gateway.completedAt).toBeTruthy();
 
     session.markStepFailed("sandbox", "Sandbox creation failed");
     loaded = session.loadSession();
     expect(loaded.steps.sandbox.status).toBe("failed");
+    expect(loaded.steps.sandbox.completedAt).toBeNull();
     expect(loaded.failure.step).toBe("sandbox");
     expect(loaded.failure.message).toMatch(/Sandbox creation failed/);
   });
@@ -105,6 +111,19 @@ describe("onboard session", () => {
     expect(loaded.nimContainer).toBe("nim-123");
     expect(loaded.policyPresets).toEqual(["pypi", "npm"]);
     expect(loaded.apiKey).toBeUndefined();
+    expect(loaded.metadata.gatewayName).toBe("nemoclaw");
+    expect(loaded.metadata.token).toBeUndefined();
+  });
+
+  it("does not clear existing metadata when updates omit whitelisted metadata fields", () => {
+    session.saveSession(session.createSession({ metadata: { gatewayName: "nemoclaw" } }));
+    session.markStepComplete("provider_selection", {
+      metadata: {
+        token: "should-not-persist",
+      },
+    });
+
+    const loaded = session.loadSession();
     expect(loaded.metadata.gatewayName).toBe("nemoclaw");
     expect(loaded.metadata.token).toBeUndefined();
   });

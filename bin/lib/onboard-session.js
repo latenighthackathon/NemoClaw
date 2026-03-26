@@ -103,10 +103,11 @@ function redactUrl(value) {
       url.password = "";
     }
     for (const key of [...url.searchParams.keys()]) {
-      if (/^(signature|sig|token|auth|access_token)$/i.test(key)) {
+      if (/(^|[-_])(?:signature|sig|token|auth|access_token)$/i.test(key)) {
         url.searchParams.set(key, "<REDACTED>");
       }
     }
+    url.hash = "";
     return url.toString();
   } catch {
     return redactSensitiveText(value);
@@ -301,6 +302,7 @@ function markStepStarted(stepName) {
     if (!step) return session;
     step.status = "in_progress";
     step.startedAt = new Date().toISOString();
+    step.completedAt = null;
     step.error = null;
     session.lastStepStarted = stepName;
     session.failure = null;
@@ -328,6 +330,7 @@ function markStepFailed(stepName, message = null) {
     const step = session.steps[stepName];
     if (!step) return session;
     step.status = "failed";
+    step.completedAt = null;
     step.error = redactSensitiveText(message);
     session.failure = sanitizeFailure({
       step: stepName,
@@ -362,11 +365,10 @@ function filterSafeUpdates(updates) {
   if (Array.isArray(updates.policyPresets)) {
     safe.policyPresets = updates.policyPresets.filter((value) => typeof value === "string");
   }
-  if (isObject(updates.metadata)) {
-    safe.metadata = {};
-    if (typeof updates.metadata.gatewayName === "string") {
-      safe.metadata.gatewayName = updates.metadata.gatewayName;
-    }
+  if (isObject(updates.metadata) && typeof updates.metadata.gatewayName === "string") {
+    safe.metadata = {
+      gatewayName: updates.metadata.gatewayName,
+    };
   }
   return safe;
 }
