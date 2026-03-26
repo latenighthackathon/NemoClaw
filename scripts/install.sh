@@ -13,7 +13,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 ROOT_INSTALLER="${SCRIPT_DIR%/scripts}/install.sh"
 
 warn_legacy_path() {
-  cat <<EOF
+  cat >&2 <<EOF
 [install] deprecated compatibility wrapper: scripts/install.sh
 [install] supported installer: ${ROOT_INSTALLER_URL}
 EOF

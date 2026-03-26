@@ -272,11 +272,25 @@ ensure_nvm_loaded() {
 
 detect_shell_profile() {
   local profile="$HOME/.bashrc"
-  if [[ "$(basename "${SHELL:-}")" == "zsh" ]]; then
-    profile="$HOME/.zshrc"
-  elif [[ ! -f "$HOME/.bashrc" && -f "$HOME/.profile" ]]; then
-    profile="$HOME/.profile"
-  fi
+  case "$(basename "${SHELL:-}")" in
+    zsh)
+      profile="$HOME/.zshrc"
+      ;;
+    fish)
+      profile="$HOME/.config/fish/config.fish"
+      ;;
+    tcsh)
+      profile="$HOME/.tcshrc"
+      ;;
+    csh)
+      profile="$HOME/.cshrc"
+      ;;
+    *)
+      if [[ ! -f "$HOME/.bashrc" && -f "$HOME/.profile" ]]; then
+        profile="$HOME/.profile"
+      fi
+      ;;
+  esac
   printf "%s" "$profile"
 }
 

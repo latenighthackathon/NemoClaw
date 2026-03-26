@@ -107,9 +107,15 @@ elif command -v gtimeout >/dev/null 2>&1; then
   TIMEOUT_BIN="gtimeout"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ONBOARD_SESSION_HELPER="${REPO_ROOT}/bin/lib/onboard-session.js"
+SCRIPT_DIR=""
+REPO_ROOT=""
+ONBOARD_SESSION_HELPER=""
+SCRIPT_PATH="${BASH_SOURCE[0]:-}"
+if [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ]; then
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  ONBOARD_SESSION_HELPER="${REPO_ROOT}/bin/lib/onboard-session.js"
+fi
 
 # Redact known sensitive patterns (API keys, tokens, passwords in env/args).
 redact() {
@@ -250,7 +256,7 @@ fi
 # -- Onboard session state --
 
 section "Onboard Session"
-if [ -f "$ONBOARD_SESSION_HELPER" ] && command -v node >/dev/null 2>&1; then
+if [ -n "$ONBOARD_SESSION_HELPER" ] && [ -f "$ONBOARD_SESSION_HELPER" ] && command -v node >/dev/null 2>&1; then
   # shellcheck disable=SC2016
   collect "onboard-session-summary" node -e '
     const helper = require(process.argv[1]);

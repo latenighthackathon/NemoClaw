@@ -9,6 +9,21 @@ import { spawnSync } from "node:child_process";
 
 const UNINSTALL_SCRIPT = path.join(import.meta.dirname, "..", "uninstall.sh");
 
+function createFakeNpmEnv(tmp) {
+  const fakeBin = path.join(tmp, "bin");
+  const npmPath = path.join(fakeBin, "npm");
+  fs.mkdirSync(fakeBin, { recursive: true });
+  fs.writeFileSync(
+    npmPath,
+    "#!/usr/bin/env bash\nexit 0\n",
+    { mode: 0o755 }
+  );
+  return {
+    ...process.env,
+    PATH: `${fakeBin}:${process.env.PATH || "/usr/bin:/bin"}`,
+  };
+}
+
 describe("uninstall CLI flags", () => {
   it("--help exits 0 and shows usage", () => {
     const result = spawnSync("bash", [UNINSTALL_SCRIPT, "--help"], {
@@ -88,6 +103,7 @@ describe("uninstall helpers", () => {
       {
         cwd: path.join(import.meta.dirname, ".."),
         encoding: "utf-8",
+        env: createFakeNpmEnv(tmp),
       },
     );
 
@@ -108,6 +124,7 @@ describe("uninstall helpers", () => {
       {
         cwd: path.join(import.meta.dirname, ".."),
         encoding: "utf-8",
+        env: createFakeNpmEnv(tmp),
       },
     );
 

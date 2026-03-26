@@ -1,21 +1,33 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-session-"));
-process.env.HOME = tmpDir;
-
 const require = createRequire(import.meta.url);
-const session = require("../bin/lib/onboard-session");
+const modulePath = require.resolve("../bin/lib/onboard-session");
+const originalHome = process.env.HOME;
+let session;
 
 beforeEach(() => {
+  process.env.HOME = tmpDir;
+  delete require.cache[modulePath];
+  session = require("../bin/lib/onboard-session");
   session.clearSession();
   session.releaseOnboardLock();
+});
+
+afterEach(() => {
+  delete require.cache[modulePath];
+  if (originalHome === undefined) {
+    delete process.env.HOME;
+  } else {
+    process.env.HOME = originalHome;
+  }
 });
 
 describe("onboard session", () => {

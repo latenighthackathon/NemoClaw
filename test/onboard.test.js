@@ -375,6 +375,9 @@ describe("onboard helpers", () => {
     process.env.NEMOCLAW_PROVIDER = "cloud";
     process.env.NEMOCLAW_MODEL = "nvidia/other-model";
     try {
+      // Provider conflict uses a two-stage alias chain in non-interactive mode:
+      // "cloud" first resolves to the requested hint, then that hint resolves
+      // to the effective provider name "nvidia-prod" for conflict comparison.
       expect(
         getResumeConfigConflicts(
           {
