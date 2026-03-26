@@ -24,6 +24,7 @@ const {
   CLOUD_MODEL_OPTIONS,
   DEFAULT_CLOUD_MODEL,
   getProviderSelectionConfig,
+  parseGatewayInference,
 } = require("./inference-config");
 const {
   inferContainerRuntime,
@@ -484,6 +485,11 @@ function verifyInferenceRoute(_provider, _model) {
   }
 }
 
+function isInferenceRouteReady(provider, model) {
+  const live = parseGatewayInference(runCaptureOpenshell(["inference", "get"], { ignoreError: true }));
+  return Boolean(live && live.provider === provider && live.model === model);
+}
+
 function sandboxExistsInGateway(sandboxName) {
   const output = runCaptureOpenshell(["sandbox", "get", sandboxName], { ignoreError: true });
   return Boolean(output);
@@ -511,6 +517,10 @@ ${JSON.stringify(selectionConfig, null, 2)}
 EOF_NEMOCLAW_CFG
 exit
 `.trim();
+}
+
+function isOpenclawReady(sandboxName) {
+  return Boolean(fetchGatewayAuthTokenFromSandbox(sandboxName));
 }
 
 function writeSandboxConfigSyncFile(script, tmpDir = os.tmpdir(), now = Date.now()) {
@@ -2358,7 +2368,7 @@ async function setupOpenclaw(sandboxName, model, provider) {
 
 // ── Step 7: Policy presets ───────────────────────────────────────
 
-async function setupPolicies(sandboxName) {
+async function _setupPolicies(sandboxName) {
   step(7, 7, "Policy presets");
 
   const suggestions = ["pypi", "npm"];
@@ -2493,6 +2503,143 @@ async function setupPolicies(sandboxName) {
   }
 
   console.log("  ✓ Policies applied");
+}
+
+function arePolicyPresetsApplied(sandboxName, selectedPresets = []) {
+  if (!Array.isArray(selectedPresets) || selectedPresets.length === 0) return false;
+  const applied = new Set(policies.getAppliedPresets(sandboxName));
+  return selectedPresets.every((preset) => applied.has(preset));
+}
+
+async function setupPoliciesWithSelection(sandboxName, options = {}) {
+  const selectedPresets = Array.isArray(options.selectedPresets) ? options.selectedPresets : null;
+  const onSelection = typeof options.onSelection === "function" ? options.onSelection : null;
+
+  step(7, 7, "Policy presets");
+
+  const suggestions = ["pypi", "npm"];
+  if (getCredential("TELEGRAM_BOT_TOKEN")) suggestions.push("telegram");
+  if (getCredential("SLACK_BOT_TOKEN") || process.env.SLACK_BOT_TOKEN) suggestions.push("slack");
+  if (getCredential("DISCORD_BOT_TOKEN") || process.env.DISCORD_BOT_TOKEN) suggestions.push("discord");
+
+  const allPresets = policies.listPresets();
+  const applied = policies.getAppliedPresets(sandboxName);
+  let chosen = selectedPresets;
+
+  if (chosen && chosen.length > 0) {
+    if (onSelection) onSelection(chosen);
+    if (!waitForSandboxReady(sandboxName)) {
+      console.error(`  Sandbox '${sandboxName}' was not ready for policy application.`);
+      process.exit(1);
+    }
+    note(`  [resume] Reapplying policy presets: ${chosen.join(", ")}`);
+    for (const name of chosen) {
+      if (applied.includes(name)) continue;
+      policies.applyPreset(sandboxName, name);
+    }
+    return chosen;
+  }
+
+  if (isNonInteractive()) {
+    const policyMode = (process.env.NEMOCLAW_POLICY_MODE || "suggested").trim().toLowerCase();
+    chosen = suggestions;
+
+    if (policyMode === "skip" || policyMode === "none" || policyMode === "no") {
+      note("  [non-interactive] Skipping policy presets.");
+      return [];
+    }
+
+    if (policyMode === "custom" || policyMode === "list") {
+      chosen = parsePolicyPresetEnv(process.env.NEMOCLAW_POLICY_PRESETS);
+      if (chosen.length === 0) {
+        console.error("  NEMOCLAW_POLICY_PRESETS is required when NEMOCLAW_POLICY_MODE=custom.");
+        process.exit(1);
+      }
+    } else if (policyMode === "suggested" || policyMode === "default" || policyMode === "auto") {
+      const envPresets = parsePolicyPresetEnv(process.env.NEMOCLAW_POLICY_PRESETS);
+      if (envPresets.length > 0) {
+        chosen = envPresets;
+      }
+    } else {
+      console.error(`  Unsupported NEMOCLAW_POLICY_MODE: ${policyMode}`);
+      console.error("  Valid values: suggested, custom, skip");
+      process.exit(1);
+    }
+
+    const knownPresets = new Set(allPresets.map((p) => p.name));
+    const invalidPresets = chosen.filter((name) => !knownPresets.has(name));
+    if (invalidPresets.length > 0) {
+      console.error(`  Unknown policy preset(s): ${invalidPresets.join(", ")}`);
+      process.exit(1);
+    }
+
+    if (onSelection) onSelection(chosen);
+    if (!waitForSandboxReady(sandboxName)) {
+      console.error(`  Sandbox '${sandboxName}' was not ready for policy application.`);
+      process.exit(1);
+    }
+    note(`  [non-interactive] Applying policy presets: ${chosen.join(", ")}`);
+    for (const name of chosen) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          policies.applyPreset(sandboxName, name);
+          break;
+        } catch (err) {
+          const message = err && err.message ? err.message : String(err);
+          if (message.includes("Unimplemented")) {
+            console.error("  OpenShell policy updates are not supported by this gateway build.");
+            console.error("  This is a known issue tracked in NemoClaw #536.");
+            throw err;
+          }
+          if (!message.includes("sandbox not found") || attempt === 2) {
+            throw err;
+          }
+          sleep(2);
+        }
+      }
+    }
+    return chosen;
+  }
+
+  console.log("");
+  console.log("  Available policy presets:");
+  allPresets.forEach((p) => {
+    const marker = applied.includes(p.name) ? "●" : "○";
+    const suggested = suggestions.includes(p.name) ? " (suggested)" : "";
+    console.log(`    ${marker} ${p.name} — ${p.description}${suggested}`);
+  });
+  console.log("");
+
+  const answer = await prompt(`  Apply suggested presets (${suggestions.join(", ")})? [Y/n/list]: `);
+
+  if (answer.toLowerCase() === "n") {
+    console.log("  Skipping policy presets.");
+    return [];
+  }
+
+  let interactiveChoice = suggestions;
+  if (answer.toLowerCase() === "list") {
+    const custom = await prompt("  Enter preset names (comma-separated): ");
+    interactiveChoice = parsePolicyPresetEnv(custom);
+  }
+
+  const knownPresets = new Set(allPresets.map((p) => p.name));
+  const invalidPresets = interactiveChoice.filter((name) => !knownPresets.has(name));
+  if (invalidPresets.length > 0) {
+    console.error(`  Unknown policy preset(s): ${invalidPresets.join(", ")}`);
+    process.exit(1);
+  }
+
+  if (onSelection) onSelection(interactiveChoice);
+  if (!waitForSandboxReady(sandboxName)) {
+    console.error(`  Sandbox '${sandboxName}' was not ready for policy application.`);
+    process.exit(1);
+  }
+
+  for (const name of interactiveChoice) {
+    policies.applyPreset(sandboxName, name);
+  }
+  return interactiveChoice;
 }
 
 // ── Dashboard ────────────────────────────────────────────────────
@@ -2781,13 +2928,26 @@ async function onboard(opts = {}) {
     }
 
     process.env.NEMOCLAW_OPENSHELL_BIN = getOpenshellBinary();
-    startRecordedStep("inference", { sandboxName, provider, model });
-    await setupInference(GATEWAY_NAME, model, provider, endpointUrl, credentialEnv);
-    delete process.env.NVIDIA_API_KEY;
-    if (nimContainer) {
-      registry.updateSandbox(sandboxName, { nimContainer });
+    const resumeInference =
+      resume &&
+      typeof provider === "string" &&
+      typeof model === "string" &&
+      isInferenceRouteReady(provider, model);
+    if (resumeInference) {
+      resumeStepMessage("inference", `${provider} / ${model}`);
+      if (nimContainer) {
+        registry.updateSandbox(sandboxName, { nimContainer });
+      }
+      onboardSession.markStepComplete("inference", { sandboxName, provider, model, nimContainer });
+    } else {
+      startRecordedStep("inference", { sandboxName, provider, model });
+      await setupInference(GATEWAY_NAME, model, provider, endpointUrl, credentialEnv);
+      delete process.env.NVIDIA_API_KEY;
+      if (nimContainer) {
+        registry.updateSandbox(sandboxName, { nimContainer });
+      }
+      onboardSession.markStepComplete("inference", { sandboxName, provider, model, nimContainer });
     }
-    onboardSession.markStepComplete("inference", { sandboxName, provider, model, nimContainer });
 
     const sandboxReuseState = getSandboxReuseState(sandboxName);
     const resumeSandbox = resume && session?.steps?.sandbox?.status === "complete" && sandboxReuseState === "ready";
@@ -2811,13 +2971,53 @@ async function onboard(opts = {}) {
       onboardSession.markStepComplete("sandbox", { sandboxName, provider, model, nimContainer });
     }
 
-    startRecordedStep("openclaw", { sandboxName, provider, model });
-    await setupOpenclaw(sandboxName, model, provider);
-    onboardSession.markStepComplete("openclaw", { sandboxName, provider, model });
+    const resumeOpenclaw = resume && sandboxName && isOpenclawReady(sandboxName);
+    if (resumeOpenclaw) {
+      resumeStepMessage("openclaw", sandboxName);
+      onboardSession.markStepComplete("openclaw", { sandboxName, provider, model });
+    } else {
+      startRecordedStep("openclaw", { sandboxName, provider, model });
+      await setupOpenclaw(sandboxName, model, provider);
+      onboardSession.markStepComplete("openclaw", { sandboxName, provider, model });
+    }
 
-    startRecordedStep("policies", { sandboxName, provider, model });
-    await setupPolicies(sandboxName);
-    onboardSession.markStepComplete("policies", { sandboxName, provider, model });
+    const recordedPolicyPresets = Array.isArray(session?.policyPresets) ? session.policyPresets : null;
+    const resumePolicies =
+      resume &&
+      sandboxName &&
+      arePolicyPresetsApplied(sandboxName, recordedPolicyPresets || []);
+    if (resumePolicies) {
+      resumeStepMessage("policies", (recordedPolicyPresets || []).join(", "));
+      onboardSession.markStepComplete("policies", { sandboxName, provider, model, policyPresets: recordedPolicyPresets || [] });
+    } else {
+      startRecordedStep("policies", {
+        sandboxName,
+        provider,
+        model,
+        policyPresets: recordedPolicyPresets || [],
+      });
+      const appliedPolicyPresets = await setupPoliciesWithSelection(sandboxName, {
+        selectedPresets:
+          resume &&
+          session?.steps?.policies?.status !== "complete" &&
+          Array.isArray(recordedPolicyPresets) &&
+          recordedPolicyPresets.length > 0
+            ? recordedPolicyPresets
+            : null,
+        onSelection: (policyPresets) => {
+          onboardSession.updateSession((current) => {
+            current.policyPresets = policyPresets;
+            return current;
+          });
+        },
+      });
+      onboardSession.markStepComplete("policies", {
+        sandboxName,
+        provider,
+        model,
+        policyPresets: appliedPolicyPresets,
+      });
+    }
 
     onboardSession.completeSession({ sandboxName, provider, model });
     completed = true;
@@ -2858,6 +3058,10 @@ module.exports = {
   runCaptureOpenshell,
   setupInference,
   setupNim,
+  isInferenceRouteReady,
+  isOpenclawReady,
+  arePolicyPresetsApplied,
+  setupPoliciesWithSelection,
   hydrateCredentialEnv,
   shouldIncludeBuildContextPath,
   writeSandboxConfigSyncFile,

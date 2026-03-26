@@ -422,6 +422,70 @@ fi`,
     expect(log).not.toMatch(new RegExp(GITHUB_INSTALL_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   });
 
+  it("auto-resumes an interrupted onboarding session during install", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-install-resume-"));
+    const fakeBin = path.join(tmp, "bin");
+    const prefix = path.join(tmp, "prefix");
+    const onboardLog = path.join(tmp, "onboard.log");
+    fs.mkdirSync(fakeBin);
+    fs.mkdirSync(path.join(prefix, "bin"), { recursive: true });
+    fs.mkdirSync(path.join(tmp, ".nemoclaw"), { recursive: true });
+
+    fs.writeFileSync(
+      path.join(tmp, ".nemoclaw", "onboard-session.json"),
+      JSON.stringify({ resumable: true, status: "in_progress" }, null, 2),
+    );
+
+    writeNodeStub(fakeBin);
+    writeNpmStub(
+      fakeBin,
+      `if [ "$1" = "pack" ]; then
+  tmpdir="$4"
+  mkdir -p "$tmpdir/package"
+  tar -czf "$tmpdir/openclaw-2026.3.11.tgz" -C "$tmpdir" package
+  exit 0
+fi
+if [ "$1" = "install" ]; then exit 0; fi
+if [ "$1" = "run" ] && [ "$2" = "build" ]; then exit 0; fi
+if [ "$1" = "link" ]; then
+  cat > "$NPM_PREFIX/bin/nemoclaw" <<'EOS'
+#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$NEMOCLAW_ONBOARD_LOG"
+exit 0
+EOS
+  chmod +x "$NPM_PREFIX/bin/nemoclaw"
+  exit 0
+fi`,
+    );
+
+    fs.writeFileSync(
+      path.join(tmp, "package.json"),
+      JSON.stringify({ name: "nemoclaw", version: "0.1.0" }, null, 2),
+    );
+    fs.mkdirSync(path.join(tmp, "nemoclaw"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, "nemoclaw", "package.json"),
+      JSON.stringify({ name: "nemoclaw-plugin", version: "0.1.0" }, null, 2),
+    );
+
+    const result = spawnSync("bash", [INSTALLER], {
+      cwd: tmp,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmp,
+        PATH: `${fakeBin}:${TEST_SYSTEM_PATH}`,
+        NEMOCLAW_NON_INTERACTIVE: "1",
+        NPM_PREFIX: prefix,
+        NEMOCLAW_ONBOARD_LOG: onboardLog,
+      },
+    });
+
+    expect(result.status).toBe(0);
+    expect(`${result.stdout}${result.stderr}`).toMatch(/Found an interrupted onboarding session — resuming it\./);
+    expect(fs.readFileSync(onboardLog, "utf-8")).toMatch(/^onboard --resume --non-interactive$/m);
+  });
+
   it("spin() non-TTY: dumps wrapped-command output and exits non-zero on failure", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-install-spin-fail-"));
     const fakeBin = path.join(tmp, "bin");

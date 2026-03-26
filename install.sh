@@ -593,14 +593,33 @@ verify_nemoclaw() {
 # ---------------------------------------------------------------------------
 run_onboard() {
   info "Running nemoclaw onboard…"
+  local -a onboard_cmd=(onboard)
+  if command_exists node && [[ -f "${HOME}/.nemoclaw/onboard-session.json" ]]; then
+    if node -e '
+      const fs = require("fs");
+      const file = process.argv[1];
+      try {
+        const data = JSON.parse(fs.readFileSync(file, "utf8"));
+        const resumable = data && data.resumable !== false;
+        const status = data && data.status;
+        process.exit(resumable && status && status !== "complete" ? 0 : 1);
+      } catch {
+        process.exit(1);
+      }
+    ' "${HOME}/.nemoclaw/onboard-session.json"; then
+      info "Found an interrupted onboarding session — resuming it."
+      onboard_cmd+=(--resume)
+    fi
+  fi
   if [ "${NON_INTERACTIVE:-}" = "1" ]; then
-    nemoclaw onboard --non-interactive
+    onboard_cmd+=(--non-interactive)
+    nemoclaw "${onboard_cmd[@]}"
   elif [ -t 0 ]; then
-    nemoclaw onboard
+    nemoclaw "${onboard_cmd[@]}"
   elif exec 3</dev/tty; then
     info "Installer stdin is piped; attaching onboarding to /dev/tty…"
     local status=0
-    nemoclaw onboard <&3 || status=$?
+    nemoclaw "${onboard_cmd[@]}" <&3 || status=$?
     exec 3<&-
     return "$status"
   else

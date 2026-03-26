@@ -76,6 +76,7 @@ describe("onboard session", () => {
       credentialEnv: "NVIDIA_API_KEY",
       preferredInferenceApi: "openai-completions",
       nimContainer: "nim-123",
+      policyPresets: ["pypi", "npm"],
       apiKey: "nvapi-secret",
       metadata: {
         gatewayName: "nemoclaw",
@@ -91,6 +92,7 @@ describe("onboard session", () => {
     expect(loaded.credentialEnv).toBe("NVIDIA_API_KEY");
     expect(loaded.preferredInferenceApi).toBe("openai-completions");
     expect(loaded.nimContainer).toBe("nim-123");
+    expect(loaded.policyPresets).toEqual(["pypi", "npm"]);
     expect(loaded.apiKey).toBeUndefined();
     expect(loaded.metadata.gatewayName).toBe("nemoclaw");
     expect(loaded.metadata.token).toBeUndefined();

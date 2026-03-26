@@ -506,6 +506,175 @@ const { setupInference } = require(${onboardPath});
     assert.match(commands[2].command, /inference' 'set'/);
   });
 
+  it("detects when the live inference route already matches the requested provider and model", () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-inference-ready-"));
+    const fakeOpenshell = path.join(tmpDir, "openshell");
+    const scriptPath = path.join(tmpDir, "inference-ready-check.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "onboard.js"));
+
+    fs.writeFileSync(
+      fakeOpenshell,
+      `#!/usr/bin/env bash
+if [ "$1" = "inference" ] && [ "$2" = "get" ]; then
+  cat <<'EOF'
+Gateway inference:
+
+  Route: inference.local
+  Provider: nvidia-prod
+  Model: nvidia/nemotron-3-super-120b-a12b
+  Version: 1
+EOF
+  exit 0
+fi
+exit 1
+`,
+      { mode: 0o755 }
+    );
+
+    fs.writeFileSync(
+      scriptPath,
+      `
+const { isInferenceRouteReady } = require(${onboardPath});
+console.log(JSON.stringify({
+  same: isInferenceRouteReady("nvidia-prod", "nvidia/nemotron-3-super-120b-a12b"),
+  otherModel: isInferenceRouteReady("nvidia-prod", "nvidia/other-model"),
+  otherProvider: isInferenceRouteReady("openai-api", "nvidia/nemotron-3-super-120b-a12b"),
+}));
+`
+    );
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        PATH: `${tmpDir}:${process.env.PATH || ""}`,
+      },
+    });
+
+    try {
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toEqual({
+        same: true,
+        otherModel: false,
+        otherProvider: false,
+      });
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects when OpenClaw is already configured inside the sandbox", () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-openclaw-ready-"));
+    const fakeOpenshell = path.join(tmpDir, "openshell");
+    const scriptPath = path.join(tmpDir, "openclaw-ready-check.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "onboard.js"));
+
+    fs.writeFileSync(
+      fakeOpenshell,
+      `#!/usr/bin/env bash
+if [ "$1" = "sandbox" ] && [ "$2" = "download" ]; then
+  dest="\${@: -1}"
+  mkdir -p "$dest/sandbox/.openclaw"
+  cat > "$dest/sandbox/.openclaw/openclaw.json" <<'EOF'
+{"gateway":{"auth":{"token":"test-token"}}}
+EOF
+  exit 0
+fi
+exit 1
+`,
+      { mode: 0o755 }
+    );
+
+    fs.writeFileSync(
+      scriptPath,
+      `
+const { isOpenclawReady } = require(${onboardPath});
+console.log(JSON.stringify({
+  ready: isOpenclawReady("my-assistant"),
+}));
+`
+    );
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        PATH: `${tmpDir}:${process.env.PATH || ""}`,
+      },
+    });
+
+    try {
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toEqual({ ready: true });
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects when recorded policy presets are already applied", () => {
+    const repoRoot = path.join(import.meta.dirname, "..");
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-policy-ready-"));
+    const registryDir = path.join(tmpDir, ".nemoclaw");
+    const registryFile = path.join(registryDir, "sandboxes.json");
+    const scriptPath = path.join(tmpDir, "policy-ready-check.js");
+    const onboardPath = JSON.stringify(path.join(repoRoot, "bin", "lib", "onboard.js"));
+
+    fs.mkdirSync(registryDir, { recursive: true });
+    fs.writeFileSync(
+      registryFile,
+      JSON.stringify(
+        {
+          sandboxes: {
+            "my-assistant": {
+              name: "my-assistant",
+              policies: ["pypi", "npm"],
+            },
+          },
+          defaultSandbox: "my-assistant",
+        },
+        null,
+        2
+      )
+    );
+
+    fs.writeFileSync(
+      scriptPath,
+      `
+const { arePolicyPresetsApplied } = require(${onboardPath});
+console.log(JSON.stringify({
+  ready: arePolicyPresetsApplied("my-assistant", ["pypi", "npm"]),
+  missing: arePolicyPresetsApplied("my-assistant", ["pypi", "slack"]),
+  empty: arePolicyPresetsApplied("my-assistant", []),
+}));
+`
+    );
+
+    const result = spawnSync(process.execPath, [scriptPath], {
+      cwd: repoRoot,
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        HOME: tmpDir,
+      },
+    });
+
+    try {
+      expect(result.status).toBe(0);
+      const payload = JSON.parse(result.stdout.trim());
+      expect(payload).toEqual({
+        ready: true,
+        missing: false,
+        empty: false,
+      });
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it("uses native Anthropic provider creation without embedding the secret in argv", () => {
     const repoRoot = path.join(import.meta.dirname, "..");
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-onboard-anthropic-"));

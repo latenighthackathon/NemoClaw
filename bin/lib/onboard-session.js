@@ -54,6 +54,7 @@ function createSession(overrides = {}) {
     credentialEnv: overrides.credentialEnv || null,
     preferredInferenceApi: overrides.preferredInferenceApi || null,
     nimContainer: overrides.nimContainer || null,
+    policyPresets: Array.isArray(overrides.policyPresets) ? overrides.policyPresets.filter((value) => typeof value === "string") : null,
     metadata: {
       gatewayName: overrides.metadata?.gatewayName || "nemoclaw",
     },
@@ -107,6 +108,7 @@ function normalizeSession(data) {
     credentialEnv: typeof data.credentialEnv === "string" ? data.credentialEnv : null,
     preferredInferenceApi: typeof data.preferredInferenceApi === "string" ? data.preferredInferenceApi : null,
     nimContainer: typeof data.nimContainer === "string" ? data.nimContainer : null,
+    policyPresets: Array.isArray(data.policyPresets) ? data.policyPresets.filter((value) => typeof value === "string") : null,
     lastStepStarted: typeof data.lastStepStarted === "string" ? data.lastStepStarted : null,
     lastCompletedStep: typeof data.lastCompletedStep === "string" ? data.lastCompletedStep : null,
     failure: sanitizeFailure(data.failure),
@@ -318,6 +320,9 @@ function filterSafeUpdates(updates) {
   if (typeof updates.credentialEnv === "string") safe.credentialEnv = updates.credentialEnv;
   if (typeof updates.preferredInferenceApi === "string") safe.preferredInferenceApi = updates.preferredInferenceApi;
   if (typeof updates.nimContainer === "string") safe.nimContainer = updates.nimContainer;
+  if (Array.isArray(updates.policyPresets)) {
+    safe.policyPresets = updates.policyPresets.filter((value) => typeof value === "string");
+  }
   if (isObject(updates.metadata)) {
     safe.metadata = {};
     if (typeof updates.metadata.gatewayName === "string") {
@@ -344,6 +349,7 @@ function summarizeForDebug(session = loadSession()) {
     credentialEnv: session.credentialEnv,
     preferredInferenceApi: session.preferredInferenceApi,
     nimContainer: session.nimContainer,
+    policyPresets: session.policyPresets,
     lastStepStarted: session.lastStepStarted,
     lastCompletedStep: session.lastCompletedStep,
     failure: session.failure,
