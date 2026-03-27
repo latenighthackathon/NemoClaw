@@ -347,6 +347,8 @@ if [ "$(id -u)" -ne 0 ]; then
     echo "[gateway] received signal, forwarding to children..."
     kill -TERM "$GATEWAY_PID" "${AUTO_PAIR_PID:-}" 2>/dev/null
     wait "$GATEWAY_PID" 2>/dev/null
+    wait "${AUTO_PAIR_PID:-}" 2>/dev/null
+    exit 0
   }
   trap cleanup SIGTERM SIGINT
 
@@ -421,6 +423,8 @@ cleanup() {
   echo "[gateway] received signal, forwarding to children..."
   kill -TERM "$GATEWAY_PID" "${AUTO_PAIR_PID:-}" 2>/dev/null
   wait "$GATEWAY_PID" 2>/dev/null
+  wait "${AUTO_PAIR_PID:-}" 2>/dev/null
+  exit 0
 }
 trap cleanup SIGTERM SIGINT
 
