@@ -314,7 +314,8 @@ while time.time() < DEADLINE:
 else:
     print(f'[auto-pair] watcher timed out approvals={APPROVED}')
 PYAUTOPAIR
-  echo "[gateway] auto-pair watcher launched (pid $!)" >&2
+  AUTO_PAIR_PID=$!
+  echo "[gateway] auto-pair watcher launched (pid $AUTO_PAIR_PID)" >&2
 }
 
 # ── Proxy environment ────────────────────────────────────────────
@@ -433,6 +434,17 @@ if [ "$(id -u)" -ne 0 ]; then
   echo "[gateway] openclaw gateway launched (pid $GATEWAY_PID)" >&2
   start_auto_pair
   print_dashboard_urls
+
+  # Forward SIGTERM/SIGINT to child processes for graceful shutdown.
+  # This script is PID 1 — without a trap, signals interrupt wait and
+  # children are orphaned until Docker sends SIGKILL after the grace period.
+  cleanup() {
+    echo "[gateway] received signal, forwarding to children..."
+    kill -TERM "$GATEWAY_PID" "${AUTO_PAIR_PID:-}" 2>/dev/null
+    wait "$GATEWAY_PID" 2>/dev/null
+  }
+  trap cleanup SIGTERM SIGINT
+
   wait "$GATEWAY_PID"
   exit $?
 fi
@@ -486,6 +498,16 @@ echo "[gateway] openclaw gateway launched as 'gateway' user (pid $GATEWAY_PID)" 
 
 start_auto_pair
 print_dashboard_urls
+
+# Forward SIGTERM/SIGINT to child processes for graceful shutdown.
+# This script is PID 1 — without a trap, signals interrupt wait and
+# children are orphaned until Docker sends SIGKILL after the grace period.
+cleanup() {
+  echo "[gateway] received signal, forwarding to children..."
+  kill -TERM "$GATEWAY_PID" "${AUTO_PAIR_PID:-}" 2>/dev/null
+  wait "$GATEWAY_PID" 2>/dev/null
+}
+trap cleanup SIGTERM SIGINT
 
 # Keep container running by waiting on the gateway process.
 # This script is PID 1 (ENTRYPOINT); if it exits, Docker kills all children.
