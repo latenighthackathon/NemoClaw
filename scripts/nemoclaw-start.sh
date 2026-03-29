@@ -450,10 +450,9 @@ if [ "$(id -u)" -ne 0 ]; then
   nohup "$OPENCLAW" gateway run >/tmp/gateway.log 2>&1 &
   GATEWAY_PID=$!
   echo "[gateway] openclaw gateway launched (pid $GATEWAY_PID)" >&2
+  trap cleanup SIGTERM SIGINT
   start_auto_pair
   print_dashboard_urls
-
-  trap cleanup SIGTERM SIGINT
 
   wait "$GATEWAY_PID"
   exit $?
@@ -505,11 +504,10 @@ harden_openclaw_symlinks
 nohup gosu gateway "$OPENCLAW" gateway run >/tmp/gateway.log 2>&1 &
 GATEWAY_PID=$!
 echo "[gateway] openclaw gateway launched as 'gateway' user (pid $GATEWAY_PID)" >&2
+trap cleanup SIGTERM SIGINT
 
 start_auto_pair
 print_dashboard_urls
-
-trap cleanup SIGTERM SIGINT
 
 # Keep container running by waiting on the gateway process.
 # This script is PID 1 (ENTRYPOINT); if it exits, Docker kills all children.
