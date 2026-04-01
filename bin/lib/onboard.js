@@ -2278,7 +2278,7 @@ async function promptValidatedSandboxName() {
       console.error("  Names must start with a letter, not a digit.");
     } else {
       console.error("  Names must be lowercase, contain only letters, numbers, and hyphens,");
-      console.error("  and must start and end with a letter or number.");
+      console.error("  must start with a letter, and end with a letter or number.");
     }
 
     // Non-interactive runs cannot re-prompt — abort so the caller can fix the
