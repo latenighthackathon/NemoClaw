@@ -1834,9 +1834,12 @@ const { setupInference } = require(${onboardPath});
     );
     assert.ok(fnMatch, "promptValidatedSandboxName function not found");
     const fnBody = fnMatch[1];
-    // Verify the retry loop exists within this function
+    // Verify the bounded retry loop exists within this function
+    assert.match(fnBody, /MAX_ATTEMPTS/);
     assert.match(fnBody, /for\s*\(let attempt/);
     assert.match(fnBody, /Please try again/);
+    // Exits after too many invalid attempts
+    assert.match(fnBody, /Too many invalid attempts/);
     // Non-interactive still exits within this function
     assert.match(fnBody, /isNonInteractive\(\)/);
     assert.match(fnBody, /process\.exit\(1\)/);
