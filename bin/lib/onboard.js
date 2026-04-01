@@ -879,20 +879,28 @@ function upsertProvider(name, type, credentialEnv, baseUrl, env = {}) {
     return { ok: true };
   }
 
+  const alreadyExists = /already.?exists/i.test(
+    `${createResult.stderr || ""} ${createResult.stdout || ""}`,
+  );
+
   const updateArgs = buildProviderArgs("update", name, type, credentialEnv, baseUrl);
   const updateResult = runOpenshell(updateArgs, runOpts);
   if (updateResult.status !== 0) {
     const output =
-      compactText(`${createResult.stderr || ""} ${updateResult.stderr || ""}`) ||
-      compactText(`${createResult.stdout || ""} ${updateResult.stdout || ""}`) ||
+      compactText(`${updateResult.stderr || ""}`) ||
+      compactText(`${updateResult.stdout || ""}`) ||
       `Failed to create or update provider '${name}'.`;
     return {
       ok: false,
-      status: updateResult.status || createResult.status || 1,
+      status: updateResult.status || 1,
       message: output,
     };
   }
-  console.log(`✓ Updated provider ${name}`);
+  if (alreadyExists) {
+    console.log(`✓ Provider ${name} already exists — updated credentials`);
+  } else {
+    console.log(`✓ Updated provider ${name}`);
+  }
   return { ok: true };
 }
 
