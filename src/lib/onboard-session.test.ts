@@ -137,7 +137,7 @@ describe("onboard session", () => {
     fs.mkdirSync(path.dirname(session.SESSION_FILE), { recursive: true });
     fs.writeFileSync(
       session.SESSION_FILE,
-      JSON.stringify({ metadata: { gatewayName: 123 } }),
+      JSON.stringify({ version: 1, metadata: { gatewayName: 123 } }),
     );
     const loaded = session.loadSession();
     expect(loaded).not.toBeNull();
