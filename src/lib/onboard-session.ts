@@ -224,7 +224,7 @@ export function normalizeSession(data: unknown): Session | null {
     lastStepStarted: typeof d.lastStepStarted === "string" ? d.lastStepStarted : null,
     lastCompletedStep: typeof d.lastCompletedStep === "string" ? d.lastCompletedStep : null,
     failure: sanitizeFailure(d.failure as Record<string, unknown> | null),
-    metadata: isObject(d.metadata)
+    metadata: isObject(d.metadata) && typeof (d.metadata as Record<string, unknown>).gatewayName === "string"
       ? ({ gatewayName: (d.metadata as Record<string, unknown>).gatewayName } as SessionMetadata)
       : undefined,
   } as Partial<Session>);
