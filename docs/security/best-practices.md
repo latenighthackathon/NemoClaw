@@ -2,7 +2,9 @@
 title:
   page: "NemoClaw Security Best Practices — Controls, Risks, and Posture Profiles"
   nav: "Security Best Practices"
-description: "A risk framework for every configurable security control in NemoClaw: defaults, what you can change, and what happens if you do."
+description:
+  main: "A risk framework for every configurable security control in NemoClaw: defaults, what you can change, and what happens if you do."
+  agent: "Presents a risk framework for every configurable security control in NemoClaw. Use when evaluating security posture, reviewing sandbox security defaults, or assessing control trade-offs."
 keywords: ["nemoclaw security best practices", "sandbox security controls risk framework"]
 topics: ["generative_ai", "ai_agents"]
 tags: ["openclaw", "openshell", "sandboxing", "security", "network_policy", "nemoclaw"]
@@ -502,6 +504,6 @@ The following patterns weaken security without providing meaningful benefit.
 - [Customize the Network Policy](../network-policy/customize-network-policy.md) for static and dynamic policy changes.
 - [Approve or Deny Network Requests](../network-policy/approve-network-requests.md) for the operator approval flow.
 - [Sandbox Hardening](../deployment/sandbox-hardening.md) for container-level security measures.
-- [Inference Profiles](../reference/inference-profiles.md) for provider configuration details.
+- [Inference Options](../inference/inference-options.md) for provider configuration details.
 - [How It Works](../about/how-it-works.md) for the protection layer architecture.
 <!-- - OpenShell [Security Best Practices](https://docs.nvidia.com/openshell/latest/security/best-practices.html) for the platform-level controls reference, including network namespace isolation, seccomp filters, SSRF protection, TLS termination, and gateway authentication. -->
