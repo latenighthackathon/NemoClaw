@@ -650,18 +650,27 @@ function upsertProvider(name, type, credentialEnv, baseUrl, env = {}) {
     return { ok: true };
   }
 
+  // Detect AlreadyExists so we can downgrade it from a scary error to an
+  // informational message after the update succeeds.
+  const createOutput = compactText(`${createResult.stderr || ""} ${createResult.stdout || ""}`);
+  const alreadyExists = /already.?exists/i.test(createOutput);
+
   const updateArgs = buildProviderArgs("update", name, type, credentialEnv, baseUrl);
   const updateResult = runOpenshell(updateArgs, runOpts);
   if (updateResult.status !== 0) {
     const output =
-      compactText(`${createResult.stderr || ""} ${updateResult.stderr || ""}`) ||
-      compactText(`${createResult.stdout || ""} ${updateResult.stdout || ""}`) ||
+      compactText(`${updateResult.stderr || ""}`) ||
+      compactText(`${updateResult.stdout || ""}`) ||
+      (!alreadyExists ? createOutput : "") ||
       `Failed to create or update provider '${name}'.`;
     return {
       ok: false,
       status: updateResult.status || createResult.status || 1,
       message: output,
     };
+  }
+  if (alreadyExists) {
+    console.log(`  ℹ Provider ${name} already exists — credentials updated`);
   }
   return { ok: true };
 }
