@@ -2477,6 +2477,7 @@ async function createSandbox(
     );
     process.exit(1);
   }
+  const tokensByEnvKey = Object.fromEntries(messagingTokenDefs.map(({ envKey, token }) => [envKey, token]));
   const activeMessagingChannels = [
     ...new Set(
       messagingTokenDefs
@@ -2484,7 +2485,8 @@ async function createSandbox(
         .map(({ envKey }) => {
           if (envKey === "DISCORD_BOT_TOKEN") return "discord";
           if (envKey === "SLACK_BOT_TOKEN") return "slack";
-          if (envKey === "SLACK_APP_TOKEN") return "slack";
+          // SLACK_APP_TOKEN alone does not enable slack; bot token is required.
+          if (envKey === "SLACK_APP_TOKEN") return tokensByEnvKey["SLACK_BOT_TOKEN"] ? "slack" : null;
           if (envKey === "TELEGRAM_BOT_TOKEN") return "telegram";
           return null;
         })
