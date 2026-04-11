@@ -2244,9 +2244,15 @@ async function promptValidatedSandboxName() {
       if (RESERVED_NAMES.has(sandboxName)) {
         console.error(`  Reserved name: '${sandboxName}' is a NemoClaw CLI command.`);
         console.error("  Choose a different name to avoid routing conflicts.");
-      } else {
-        return sandboxName;
+        if (isNonInteractive()) {
+          process.exit(1);
+        }
+        if (attempt < MAX_ATTEMPTS - 1) {
+          console.error("  Please try again.\n");
+        }
+        continue;
       }
+      return sandboxName;
     }
 
     console.error(`  Invalid sandbox name: '${sandboxName}'`);
