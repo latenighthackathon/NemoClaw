@@ -485,8 +485,12 @@ export function runDebug(opts: DebugOptions = {}): void {
     }
 
     console.log("");
-    info("Done. If filing a bug, run with --output and attach the tarball to your issue:");
-    info("  nemoclaw debug --output /tmp/nemoclaw-debug.tar.gz");
+    if (output) {
+      info("Done. Tarball written. Attach it to your bug report.");
+    } else {
+      info("Done. If filing a bug, run with --output and attach the tarball to your issue:");
+      info("  nemoclaw debug --output /tmp/nemoclaw-debug.tar.gz");
+    }
   } finally {
     rmSync(collectDir, { recursive: true, force: true });
   }
