@@ -2233,7 +2233,20 @@ async function promptValidatedSandboxName() {
     // Validate: RFC 1123 subdomain — lowercase alphanumeric and hyphens,
     // must start with a letter (not a digit) to satisfy Kubernetes naming.
     if (/^[a-z]([a-z0-9-]*[a-z0-9])?$/.test(sandboxName)) {
-      return sandboxName;
+      // Reject names that collide with global CLI commands.
+      // A sandbox named 'status' makes 'nemoclaw status connect' route to
+      // the global status command instead of the sandbox.
+      const RESERVED_NAMES = new Set([
+        "onboard", "list", "deploy", "setup", "setup-spark",
+        "start", "stop", "status", "debug", "uninstall",
+        "credentials", "help",
+      ]);
+      if (RESERVED_NAMES.has(sandboxName)) {
+        console.error(`  Reserved name: '${sandboxName}' is a NemoClaw CLI command.`);
+        console.error("  Choose a different name to avoid routing conflicts.");
+      } else {
+        return sandboxName;
+      }
     }
 
     console.error(`  Invalid sandbox name: '${sandboxName}'`);
