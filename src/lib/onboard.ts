@@ -4331,9 +4331,7 @@ async function onboard(opts = {}) {
   // preflight (Docker/OpenShell checks). Without this, users see a
   // misleading 'Docker is not reachable' error instead of the real
   // problem: an unsupported provider value.
-  if (isNonInteractive()) {
-    getRequestedProviderHint(true);
-  }
+  getRequestedProviderHint();
   const lockResult = onboardSession.acquireOnboardLock(
     `nemoclaw onboard${resume ? " --resume" : ""}${isNonInteractive() ? " --non-interactive" : ""}${requestedFromDockerfile ? ` --from ${requestedFromDockerfile}` : ""}`,
   );
