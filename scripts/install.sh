@@ -156,6 +156,23 @@ resolve_default_sandbox_name() {
   local registry_file="${HOME}/.nemoclaw/sandboxes.json"
   local sandbox_name="${NEMOCLAW_SANDBOX_NAME:-}"
 
+  # Prefer the sandbox name from the current onboard session — it reflects
+  # the sandbox just created, whereas sandboxes.json may hold a stale default
+  # from a previous gateway that no longer exists (#1839).
+  local session_file="${HOME}/.nemoclaw/onboard-session.json"
+  if [[ -z "$sandbox_name" && -f "$session_file" ]] && command_exists node; then
+    sandbox_name="$(
+      node -e '
+        const fs = require("fs");
+        try {
+          const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          const name = data.sandboxName || "";
+          process.stdout.write(name);
+        } catch {}
+      ' "$session_file" 2>/dev/null || true
+    )"
+  fi
+
   if [[ -z "$sandbox_name" && -f "$registry_file" ]] && command_exists node; then
     sandbox_name="$(
       node -e '
