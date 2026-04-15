@@ -31,8 +31,10 @@ export interface StreamableReadable {
   destroy?(): void;
 }
 
-export interface StreamableChildProcess
-  extends Pick<ChildProcess, "kill" | "removeAllListeners" | "unref"> {
+export interface StreamableChildProcess extends Pick<
+  ChildProcess,
+  "kill" | "removeAllListeners" | "unref"
+> {
   stdout: StreamableReadable | null;
   stderr: StreamableReadable | null;
   on(event: "error", listener: (error: Error & { code?: string }) => void): this;
@@ -62,7 +64,7 @@ export function streamSandboxCreate(
   const silentPhaseMs = options.silentPhaseMs || 15000;
   const startedAt = Date.now();
   let lastOutputAt = startedAt;
-  type CreatePhase = "build" | "upload" | "create" | "ready";
+  type CreatePhase = "pull" | "build" | "upload" | "create" | "ready";
 
   let currentPhase: CreatePhase | null = null;
   let lastHeartbeatPhase: CreatePhase | null = null;
@@ -98,15 +100,17 @@ export function streamSandboxCreate(
     lastHeartbeatPhase = null;
     lastHeartbeatBucket = -1;
     const phaseLine =
-      nextPhase === "build"
-        ? "  Building sandbox image..."
-        : nextPhase === "upload"
-          ? "  Uploading image into OpenShell gateway..."
-          : nextPhase === "create"
-            ? "  Creating sandbox in gateway..."
-            : nextPhase === "ready"
-              ? "  Waiting for sandbox to become ready..."
-              : null;
+      nextPhase === "pull"
+        ? "  Pulling base image from registry..."
+        : nextPhase === "build"
+          ? "  Building sandbox image..."
+          : nextPhase === "upload"
+            ? "  Uploading image into OpenShell gateway..."
+            : nextPhase === "create"
+              ? "  Creating sandbox in gateway..."
+              : nextPhase === "ready"
+                ? "  Waiting for sandbox to become ready..."
+                : null;
     if (phaseLine) printProgressLine(phaseLine);
   }
 
@@ -117,6 +121,8 @@ export function streamSandboxCreate(
     lastOutputAt = Date.now();
     if (/^ {2}Building image /.test(line) || /^ {2}Step \d+\/\d+ : /.test(line)) {
       setPhase("build");
+    } else if (isPullLine(line)) {
+      setPhase("pull");
     } else if (
       /^ {2}Pushing image /.test(line) ||
       /^\s*\[progress\]/.test(line) ||
@@ -145,7 +151,21 @@ export function streamSandboxCreate(
       /^\s*\[progress\]/.test(line) ||
       /^ {2}Image .*available in the gateway/.test(line) ||
       /^Created sandbox: /.test(line) ||
-      /^✓ /.test(line)
+      /^✓ /.test(line) ||
+      /^\s*(?:[a-z]+:\s+)?Pulling from \S+/.test(line) ||
+      /^\s*Status: (?:Downloaded|Image is up to date)/.test(line)
+    );
+  }
+
+  function isPullLine(line: string) {
+    return (
+      /^\s*(?:[a-z]+:\s+)?Pulling from \S+/.test(line) ||
+      /^\s*[a-f0-9]{6,}: (?:Pulling fs layer|Waiting|Downloading|Extracting|Pull complete|Verifying Checksum|Download complete)\b/.test(
+        line,
+      ) ||
+      /^\s*Status: (?:Downloaded|Image is up to date)/.test(line) ||
+      /^\s*Digest: sha256:[a-f0-9]{8,}/.test(line) ||
+      /^\s*#\d+\s+(?:resolve\s+\S+|sha256:[a-f0-9]+\s+[\d.]+\s*(?:B|KB|MB|GB)\s*\/)/.test(line)
     );
   }
 
@@ -225,13 +245,15 @@ export function streamSandboxCreate(
       return;
     }
     const heartbeatLine =
-      currentPhase === "upload"
-        ? `  Still uploading image into OpenShell gateway... (${elapsed}s elapsed)`
-        : currentPhase === "create"
-          ? `  Still creating sandbox in gateway... (${elapsed}s elapsed)`
-          : currentPhase === "ready"
-            ? `  Still waiting for sandbox to become ready... (${elapsed}s elapsed)`
-            : `  Still building sandbox image... (${elapsed}s elapsed)`;
+      currentPhase === "pull"
+        ? `  Still pulling base image from registry... (${elapsed}s elapsed)`
+        : currentPhase === "upload"
+          ? `  Still uploading image into OpenShell gateway... (${elapsed}s elapsed)`
+          : currentPhase === "create"
+            ? `  Still creating sandbox in gateway... (${elapsed}s elapsed)`
+            : currentPhase === "ready"
+              ? `  Still waiting for sandbox to become ready... (${elapsed}s elapsed)`
+              : `  Still building sandbox image... (${elapsed}s elapsed)`;
     if (trimDisplayLine(heartbeatLine) !== lastPrintedLine) {
       printProgressLine(heartbeatLine);
       lastHeartbeatPhase = currentPhase;
@@ -244,7 +266,9 @@ export function streamSandboxCreate(
     resolvePromise = resolve;
     child.on("error", (error) => {
       const code = error?.code;
-      const detail = code ? `spawn failed: ${error.message} (${code})` : `spawn failed: ${error.message}`;
+      const detail = code
+        ? `spawn failed: ${error.message} (${code})`
+        : `spawn failed: ${error.message}`;
       lines.push(detail);
       finish(1);
     });
