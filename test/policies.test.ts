@@ -909,6 +909,22 @@ selectForRemoval(items, options)
         /Note: the 'telegram' preset only opens network egress to the Telegram API\./,
       );
       expect(result.stdout).toMatch(/re-run 'nemoclaw onboard' and select Telegram/);
+
+      // The warning must be printed before the apply confirmation prompt.
+      // The endpoint disclosure is logged immediately before the warning in
+      // sandboxPolicyAdd; the prompt is captured as a mocked call after the
+      // warning is logged.
+      const endpointsIdx = result.stdout.indexOf("Endpoints that would be opened");
+      const warningIdx = result.stdout.indexOf(
+        "Note: the 'telegram' preset only opens network egress",
+      );
+      expect(endpointsIdx).toBeGreaterThanOrEqual(0);
+      expect(warningIdx).toBeGreaterThan(endpointsIdx);
+
+      const calls = JSON.parse(result.stdout.split("__CALLS__")[1].trim());
+      const promptCall = calls.find((c) => c.type === "prompt");
+      expect(promptCall).toBeTruthy();
+      expect(promptCall.message).toContain("Apply 'telegram' to sandbox 'test-sandbox'?");
     });
 
     it("does not warn about messaging when a non-messaging preset is selected", () => {
