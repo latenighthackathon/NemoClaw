@@ -152,14 +152,14 @@ export function streamSandboxCreate(
       /^ {2}Image .*available in the gateway/.test(line) ||
       /^Created sandbox: /.test(line) ||
       /^✓ /.test(line) ||
-      /^\s*(?:[a-z]+:\s+)?Pulling from \S+/.test(line) ||
+      /^\s*(?:[^:\s]+:\s+)?Pulling from \S+/.test(line) ||
       /^\s*Status: (?:Downloaded|Image is up to date)/.test(line)
     );
   }
 
   function isPullLine(line: string) {
     return (
-      /^\s*(?:[a-z]+:\s+)?Pulling from \S+/.test(line) ||
+      /^\s*(?:[^:\s]+:\s+)?Pulling from \S+/.test(line) ||
       /^\s*[a-f0-9]{6,}: (?:Pulling fs layer|Waiting|Downloading|Extracting|Pull complete|Verifying Checksum|Download complete)\b/.test(
         line,
       ) ||

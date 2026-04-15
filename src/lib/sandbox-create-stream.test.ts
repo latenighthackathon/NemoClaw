@@ -210,6 +210,33 @@ describe("sandbox-create-stream", () => {
     expect(logLine).toHaveBeenCalledWith("  Pulling base image from registry...");
   });
 
+  it("recognizes non-lowercase image tag prefixes in 'Pulling from' lines", async () => {
+    const child = new FakeChild();
+    const logLine = vi.fn();
+    const promise = streamSandboxCreate("echo create", process.env, {
+      logLine,
+      spawnImpl: () => child as never,
+      heartbeatIntervalMs: 1_000,
+      silentPhaseMs: 10_000,
+    });
+
+    child.stdout.emit(
+      "data",
+      Buffer.from(
+        "v1.2.3: Pulling from nvidia/nemoclaw/sandbox-base\n" +
+          "cuda-12.5: Pulling from nvidia/cuda\n" +
+          "12.4: Pulling from library/python\n",
+      ),
+    );
+    child.emit("close", 0);
+
+    await expect(promise).resolves.toMatchObject({ status: 0 });
+    expect(logLine).toHaveBeenCalledWith("  Pulling base image from registry...");
+    expect(logLine).toHaveBeenCalledWith("v1.2.3: Pulling from nvidia/nemoclaw/sandbox-base");
+    expect(logLine).toHaveBeenCalledWith("cuda-12.5: Pulling from nvidia/cuda");
+    expect(logLine).toHaveBeenCalledWith("12.4: Pulling from library/python");
+  });
+
   it("emits a pull-phase heartbeat instead of a build-phase one during base image download", async () => {
     vi.useFakeTimers();
     const child = new FakeChild();
