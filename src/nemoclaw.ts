@@ -1380,6 +1380,13 @@ async function sandboxPolicyAdd(sandboxName, args = []) {
     console.log(`  Endpoints that would be opened: ${endpoints.join(", ")}`);
   }
 
+  const messagingWarning = policies.getMessagingPresetWarning(answer);
+  if (messagingWarning) {
+    console.log("");
+    console.log(`  ${messagingWarning}`);
+    console.log("");
+  }
+
   if (dryRun) {
     console.log("  --dry-run: no changes applied.");
     return;
