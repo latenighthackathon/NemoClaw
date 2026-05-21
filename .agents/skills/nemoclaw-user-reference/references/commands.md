@@ -180,6 +180,20 @@ If a host firewall blocks that sandbox path, onboarding exits with a `sudo ufw a
 Tune the wait via `NEMOCLAW_REUSE_HEALTH_POLL_COUNT` (default `6`) and `NEMOCLAW_REUSE_HEALTH_POLL_INTERVAL` (default `5` seconds).
 The poll count is clamped to a minimum of `1` so the probe always runs at least once, and the interval is clamped to a minimum of `0` (no sleep between attempts).
 
+#### `--fresh` and `--resume`
+
+By default, `nemoclaw onboard` resumes any saved onboarding session for the same sandbox so a transient failure (network, credential typo, etc.) does not force you to redo earlier steps.
+Pass `--fresh` to ignore any saved session and start the wizard from the first prompt; use this when the saved session is stale or you want to change selections made in an earlier attempt.
+Pass `--resume` to require that a saved session exist and resume from where it left off; the command exits non-zero if no session is found.
+`--fresh` and `--resume` are mutually exclusive.
+
+#### `--yes` / `-y`
+
+Auto-confirm prompts that are safe for unattended onboarding.
+Equivalent to setting `NEMOCLAW_YES=1`.
+Use together with `--non-interactive` (or `NEMOCLAW_NON_INTERACTIVE=1`) for fully scripted runs.
+This flag does not bypass the third-party software notice; use `--yes-i-accept-third-party-software` (or `NEMOCLAW_ACCEPT_THIRD_PARTY_SOFTWARE=1`) for that.
+
 #### `--from <Dockerfile>`
 
 Build the sandbox image from a custom Dockerfile instead of the stock NemoClaw image.
