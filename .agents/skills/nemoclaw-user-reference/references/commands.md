@@ -1251,6 +1251,19 @@ These flags change defaults for commands that manage existing sandboxes.
 | `NEMOCLAW_CLEANUP_GATEWAY` | `1`, `true`, or `yes` to enable; `0`, `false`, or `no` to disable | Sets the default for whether `nemoclaw <name> destroy` removes the shared gateway when destroying the last sandbox. Command-line `--cleanup-gateway` and `--no-cleanup-gateway` still take precedence. |
 | `NEMOCLAW_DISABLE_INFERENCE_ROUTE_REPAIR` | `1` to enable | Skips the automatic DNS-proxy repair for stale `inference.local` routes during `nemoclaw <name> connect` and `nemoclaw <name> connect --probe-only`. Use only as a troubleshooting escape hatch. |
 
+### Remote Deployment
+
+These variables seed defaults for `nemoclaw deploy` and `nemoclaw onboard --remote`, which provision a sandbox on a Brev instance.
+Each has a flag equivalent on `deploy`; the env var lets non-interactive runs skip the prompt.
+For narrative how-to coverage of `NEMOCLAW_BREV_PROVIDER` and `NEMOCLAW_GPU`, see [Deploy to Remote GPU](https://github.com/NVIDIA/NemoClaw/blob/main/docs/deployment/deploy-to-remote-gpu.md).
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `NEMOCLAW_BREV_PROVIDER` | `gcp` | Cloud provider for Brev instance creation. |
+| `NEMOCLAW_GPU` | `a2-highgpu-1g:nvidia-tesla-a100:1` | GPU specification (instance type and GPU model) for the Brev instance. |
+| `NEMOCLAW_DEPLOY_NO_CONNECT` | unset | When set to `1`, skips the automatic `connect` step after the remote deploy completes. |
+| `NEMOCLAW_DEPLOY_NO_START_SERVICES` | unset | When set to `1`, skips starting services automatically after the remote deploy. |
+
 ## NemoHermes Alias
 
 `nemohermes` is a convenience alias that pre-selects the Hermes agent.
