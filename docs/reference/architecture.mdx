@@ -76,9 +76,19 @@ graph LR
 
 The logical diagram above shows how components relate.
 This section shows what actually runs where on the host.
-NemoClaw uses a Docker daemon.
-The OpenShell gateway runs as a container that embeds a k3s cluster.
-The sandbox runs as a Kubernetes pod inside that embedded cluster.
+NemoClaw uses a Docker daemon, and the OpenShell gateway runs as a container.
+The sandbox runs as a sibling Docker container or as a pod inside an embedded `k3s` cluster, depending on the host platform.
+
+| Platform | Compute path | Sandbox runs as |
+|---|---|---|
+| Linux (any arch, including DGX Spark / Station) | Docker driver | Sibling Docker container |
+| Windows WSL2 (Docker Desktop, WSL backend) | Docker driver | Sibling Docker container (WSL2 reports `platform === "linux"`) |
+| macOS Apple Silicon (Colima or Docker Desktop) | Docker driver | Sibling Docker container |
+
+Every platform currently listed in [`ci/platform-matrix.json`](https://github.com/NVIDIA/NemoClaw/blob/main/ci/platform-matrix.json) selects the Docker driver compute path; the dispatch is `platform === "linux" || (platform === "darwin" && arch === "arm64")` in [`src/lib/onboard/docker-driver-platform.ts`](https://github.com/NVIDIA/NemoClaw/blob/main/src/lib/onboard/docker-driver-platform.ts).
+On the Docker driver path, the embedded `k3s` cluster and the sandbox pod are replaced by a sibling Docker container that hosts the OpenClaw agent under the same `Landlock`, `seccomp`, and `netns` confinement.
+
+The diagram below describes the legacy `k3s` path, kept for historical context: when a platform fell outside the dispatch rule above the gateway embedded a `k3s` cluster and scheduled the sandbox as a pod inside it.
 
 ```mermaid
 graph TB
@@ -132,9 +142,10 @@ Layering from top to bottom:
 |---|---|---|
 | Host CLI | Host process (`nemoclaw` on Node.js) | Orchestrates OpenShell via `openshell` CLI calls. |
 | Docker daemon | Host service | Runs the OpenShell gateway container. |
-| Gateway container | Docker container | Hosts the credential store, the L7 proxy, and the embedded k3s control plane. |
-| k3s | Process tree inside the gateway container | Kubernetes control plane that schedules the sandbox pod. |
-| Sandbox pod | Pod in the embedded k3s cluster | Runs the OpenClaw agent and the NemoClaw plugin under Landlock + seccomp + netns. |
+| Gateway container | Docker container | Hosts the credential store and the L7 proxy. On the legacy `k3s` path, also hosts the embedded `k3s` control plane. |
+| `k3s` (legacy path only) | Process tree inside the gateway container | Kubernetes control plane that schedules the sandbox pod. |
+| Sandbox container (Docker driver path) | Sibling Docker container managed by the gateway | Runs the OpenClaw agent and the NemoClaw plugin under `Landlock` + `seccomp` + `netns`. |
+| Sandbox pod (legacy `k3s` path) | Pod in the embedded `k3s` cluster | Runs the OpenClaw agent and the NemoClaw plugin under `Landlock` + `seccomp` + `netns`. |
 | OpenShell L7 proxy | Process in the gateway container | Intercepts agent egress and rewrites `Authorization` headers (Bearer/Bot) and URL-path segments to inject the real credential at the network boundary. |
 
 NemoClaw never gives the sandbox a raw provider key.
