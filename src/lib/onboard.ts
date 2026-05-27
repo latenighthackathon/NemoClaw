@@ -438,6 +438,8 @@ const { destroyGatewayWithVolumeCleanup } =
 const {
   gatewayCliSupportsLifecycleCommands,
 } = require("./onboard/gateway-lifecycle") as typeof import("./onboard/gateway-lifecycle");
+const { reconcilePreflightGatewayReuseState } =
+  require("./onboard/preflight-gateway-reuse") as typeof import("./onboard/preflight-gateway-reuse");
 const {
   getGatewayReuseHealthWaitConfig,
   isDockerDriverGatewayHttpReady,
@@ -1961,65 +1963,22 @@ async function preflight(
   // metadata can be stale after a manual `docker rm`. See #2020. Newer
   // package-managed OpenShell gateways do not have an openshell-cluster-*
   // Docker container, so the live CLI health check is the source of truth.
-  if (gatewayReuseState === "healthy" && gatewayCliSupportsLifecycleCommands(runCaptureOpenshell)) {
-    const containerState = verifyGatewayContainerRunning(GATEWAY_NAME);
-    if (containerState === "missing") {
-      console.log("  Gateway metadata is stale (container not running). Cleaning up...");
-      runOpenshell(["forward", "stop", String(DASHBOARD_PORT)], { ignoreError: true });
-      gatewayReuseState = destroyGatewayForReuse(
-        destroyGateway,
-        "  ✓ Stale gateway metadata cleaned up",
-        "  ! Stale gateway metadata cleanup failed; leaving registry state intact.",
-      );
-    } else if (containerState === "unknown") {
-      // Docker probe failed but cached metadata says healthy. Try the host-level
-      // HTTP probe — it doesn't depend on Docker, so it can confirm the gateway
-      // is genuinely serving even when the daemon is flaky.
-      //
-      // Per #2020 the "unknown" state must stay non-destructive end-to-end:
-      // do not downgrade to "missing" in preflight even when HTTP probe fails.
-      // Doing so would feed the orphan-cleanup block below, and a transient
-      // `docker inspect` failure plus an HTTP warm-up miss would delete a
-      // live gateway. The main onboard "unknown" branch makes the abort/reuse
-      // decision once preflight has surfaced the warning to the user.
-      if (await waitForGatewayHttpReady()) {
-        console.log(
-          "  Warning: could not verify gateway container state (Docker may be unavailable), but the gateway is responding on HTTP. Proceeding with reuse.",
-        );
-      } else {
-        console.log(
-          "  Warning: could not verify gateway container state and the gateway is not responding on HTTP. Onboard will abort before reuse if this persists; restart Docker and re-run.",
-        );
-      }
-    } else if (!(await waitForGatewayHttpReady())) {
-      // Container is running but the gateway HTTP endpoint is not responding.
-      // Common immediately after a Docker daemon restart — the container comes
-      // back before the OpenShell gateway upstream finishes warming up. Safe to
-      // recreate because Docker is functional. See #3258.
-      console.log(
-        `  Gateway container is running but ${getGatewayLocalEndpoint()}/ is not responding. Recreating...`,
-      );
-      runOpenshell(["forward", "stop", String(DASHBOARD_PORT)], { ignoreError: true });
-      gatewayReuseState = destroyGatewayForReuse(
-        destroyGateway,
-        "  ✓ Stale gateway cleaned up",
-        "  ! Stale gateway cleanup failed; leaving registry state intact.",
-      );
-    } else {
-      const imageDrift = getGatewayClusterImageDrift();
-      if (imageDrift) {
-        console.log(
-          `  Gateway image ${imageDrift.currentVersion} does not match openshell ${imageDrift.expectedVersion}. Recreating...`,
-        );
-        stopAllDashboardForwards();
-        gatewayReuseState = destroyGatewayForReuse(
-          destroyGateway,
-          "  ✓ Previous gateway cleaned up",
-          "  ! Previous gateway cleanup failed; leaving registry state intact.",
-        );
-      }
-    }
-  }
+  gatewayReuseState = await reconcilePreflightGatewayReuseState({
+    gatewayReuseState,
+    supportsLifecycleCommands: gatewayCliSupportsLifecycleCommands(runCaptureOpenshell),
+    gatewayName: GATEWAY_NAME,
+    verifyGatewayContainerRunning,
+    recoverGatewayRuntime,
+    waitForGatewayHttpReady,
+    getGatewayLocalEndpoint,
+    stopDashboardForward: () =>
+      runOpenshell(["forward", "stop", String(DASHBOARD_PORT)], { ignoreError: true }),
+    stopAllDashboardForwards,
+    destroyGateway,
+    destroyGatewayForReuse,
+    getGatewayClusterImageDrift,
+    exitProcess: (code) => process.exit(code),
+  });
 
   gatewayReuseState = applyPreflightGatewayCleanup({
     gatewayReuseState,
@@ -6890,6 +6849,7 @@ async function onboard(opts: OnboardOptions = {}): Promise<void> {
         gatewayCliSupportsLifecycleCommands: () => gatewayCliSupportsLifecycleCommands(runCaptureOpenshell),
         verifyGatewayContainerRunning,
         waitForGatewayHttpReady,
+        recoverGatewayRuntime,
         getGatewayLocalEndpoint,
         stopDashboardForward: () => bestEffortForwardStop(runOpenshell, DASHBOARD_PORT),
         destroyGateway,
