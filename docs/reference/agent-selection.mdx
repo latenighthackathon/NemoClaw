@@ -1,0 +1,140 @@
+---
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+title: "Agent Selection Guide"
+sidebar-title: "Agent Selection Guide"
+description: "Choose between the OpenClaw agent (default) and the Hermes agent for a NemoClaw sandbox."
+description-agent: "Compares the OpenClaw and Hermes agent paths through NemoClaw. Use when deciding whether to onboard with `nemoclaw` (OpenClaw) or `nemohermes` (Hermes), or when explaining the differences between the two agents to operators."
+keywords: ["openclaw vs hermes", "nemohermes vs nemoclaw", "which agent", "agent selection", "nemoclaw agents"]
+content:
+  type: "reference"
+skill:
+  priority: 200
+---
+
+{/* SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. */}
+{/* SPDX-License-Identifier: Apache-2.0 */}
+
+# Agent Selection Guide
+
+NemoClaw can onboard one of two agents into the sandbox: **OpenClaw** (the default) or **Hermes** (experimental).
+This guide explains what each agent provides, when to pick which, and how to switch.
+
+## Summary
+
+The table below maps a common goal to the agent entry point that best fits it.
+
+| Want                                                                         | Use                                |
+|------------------------------------------------------------------------------|------------------------------------|
+| A chat dashboard, OpenClaw plugins, and the documented default flow          | OpenClaw (`nemoclaw onboard`)      |
+| An OpenAI-compatible API at `localhost:8642/v1` that any client can connect to | Hermes (`nemohermes onboard`)      |
+| Both side-by-side, on the same host                                          | Onboard each under a distinct name |
+
+## What Each Agent Provides
+
+**OpenClaw** is the default NemoClaw agent.
+It is a gateway-based agent with a plugin ecosystem hosted at [openclaw.ai](https://openclaw.ai).
+The agent runs inside the NemoClaw-managed sandbox and exposes a chat dashboard on port `18789`, suitable for in-browser interaction or for the NemoClaw TUI.
+OpenClaw is what every page in this documentation refers to unless it explicitly says "Hermes".
+
+**Hermes** is an experimental, self-improving AI agent from Nous Research, integrated into NemoClaw via the [`nemohermes`](/reference/commands#nemohermes-alias) alias.
+Hermes exposes an OpenAI-compatible API on port `8642` (`/v1` for chat completions, `/health` for liveness).
+It does not ship a browser dashboard; any OpenAI-compatible client (e.g., Open WebUI, LobeChat, custom code) can connect.
+
+## When to Choose OpenClaw
+
+Pick OpenClaw if any of these apply:
+
+- You want the standard, documented experience, every quickstart, tutorial, and troubleshooting entry without the `[Hermes]` prefix targets OpenClaw.
+- You want the OpenClaw plugin ecosystem (skills, integrations, dashboards).
+- You want a browser dashboard for direct interaction without integrating an OpenAI-compatible client.
+- You want to use NemoClaw's Brave Search policy preset (Hermes does not consume this preset).
+- You want sub-agents configured per `agents.defaults` in `openclaw.json`.
+
+Onboard OpenClaw with:
+
+```console
+$ nemoclaw onboard
+```
+
+The default sandbox name is `my-assistant`.
+
+## When to Choose Hermes
+
+Pick Hermes if any of these apply:
+
+- You want a stable OpenAI-compatible API endpoint to integrate into existing tooling that already speaks the OpenAI API.
+- You want to run Hermes' own self-improvement / learning loop inside an OpenShell sandbox.
+- You want to use the Hermes Provider as your inference backend (`hermesProvider` provider key, with OAuth or `NOUS_API_KEY` authentication).
+- You are running headless or scripting Hermes from another machine via the forwarded API port.
+
+Onboard Hermes with:
+
+```console
+$ nemohermes onboard
+```
+
+The default sandbox name is `hermes`.
+A common pattern is to use `my-hermes` so the sandbox does not collide with the agent name itself when listing.
+
+<Warning>
+The Hermes path is currently marked experimental.
+Interfaces, defaults, and supported features may change without notice.
+</Warning>
+
+## Feature Matrix
+
+The matrix below summarizes the user-visible differences between the two agent paths.
+
+| Feature                                | OpenClaw                                                  | Hermes                                                                |
+|----------------------------------------|-----------------------------------------------------------|-----------------------------------------------------------------------|
+| Forwarded port (default)               | `18789`                                                   | `8642`                                                                |
+| Surface on that port                   | Chat dashboard (browser) and TUI                          | OpenAI-compatible API (`/v1`); no dashboard                           |
+| Auth model for clients                 | Token in URL fragment (`#token=`)                         | Bearer token in `Authorization` header                                |
+| Default sandbox name                   | `my-assistant`                                            | `hermes`                                                              |
+| Side-by-side with the other agent      | Yes, under distinct sandbox names                         | Yes, under distinct sandbox names                                     |
+| Plugins / skills ecosystem             | [openclaw.ai](https://openclaw.ai) plugins and skills     | Hermes' own learning loop and Nous-managed integrations               |
+| NemoClaw Brave Search policy preset    | Consumed by the agent                                     | Not consumed, Hermes does not use NemoClaw's web-search configuration |
+| Sub-agent configuration                | Configurable via `openclaw.json` `agents.defaults`        | Configured inside the sandbox via Hermes' own configuration           |
+| Inference provider selection           | All NemoClaw providers; configured at onboard time        | All NemoClaw providers, plus the Hermes Provider (`hermesProvider`)   |
+| Stability status                       | Default / supported                                       | Experimental                                                          |
+
+For the lower-level **CLI** decision (`nemoclaw` vs `openshell` for a given operation), see [CLI Selection Guide](/reference/cli-selection-guide).
+
+## Switching Between Agents
+
+The two flows below cover the common transitions: replacing the agent on an existing sandbox in place, and onboarding both agents side by side under distinct sandbox names.
+
+Each sandbox name maps to exactly one agent type.
+NemoClaw rejects onboarding the other agent under the same name with a message similar to:
+
+```text
+Sandbox 'my-assistant' already exists as OpenClaw.
+nemohermes is onboarding Hermes for this sandbox name.
+Side-by-side agents are supported, but each sandbox name has one agent type.
+```
+
+To convert a sandbox to the other agent in place, destroy and re-onboard:
+
+```console
+$ nemoclaw <name> destroy
+$ NEMOCLAW_AGENT=hermes nemohermes onboard
+```
+
+To run both agents on the same host without destroying anything, onboard each under a different name:
+
+```console
+$ nemoclaw onboard                                    # creates my-assistant (OpenClaw)
+$ nemohermes onboard                                  # creates hermes (Hermes)
+$ nemoclaw list
+```
+
+## Next Steps
+
+The following pages cover the most common follow-up tasks after picking an agent.
+
+- [Quickstart](/get-started/quickstart) — onboard the default OpenClaw agent.
+- [Quickstart with Hermes](/get-started/quickstart-hermes) — onboard the Hermes agent.
+- [CLI Selection Guide](/reference/cli-selection-guide) — choose between `nemoclaw` and `openshell` for a given operation.
+- [Troubleshooting](/reference/troubleshooting) — common issues, including a Hermes-specific section.
+- [Commands](/reference/commands) — full `nemoclaw` and `nemohermes` reference.

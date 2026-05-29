@@ -1,6 +1,6 @@
 ---
 name: "nemoclaw-user-reference"
-description: "Describes the NemoClaw plugin and blueprint architecture and how they orchestrate the OpenClaw sandbox. Use when looking up architecture, plugin structure, or blueprint design. Trigger keywords - nemoclaw architecture, nemoclaw plugin blueprint structure, nemoclaw vs openshell, which cli, nemoclaw cli, openshell cli, sandbox commands, nemoclaw cli commands, nemoclaw command reference, nemoclaw network policy, sandbox egress control operator approval, nemoclaw troubleshooting, nemoclaw debug sandbox issues."
+description: "Compares the OpenClaw and Hermes agent paths through NemoClaw. Use when deciding whether to onboard with `nemoclaw` (OpenClaw) or `nemohermes` (Hermes), or when explaining the differences between the two agents to operators. Trigger keywords - openclaw vs hermes, nemohermes vs nemoclaw, which agent, agent selection, nemoclaw agents, nemoclaw architecture, nemoclaw plugin blueprint structure, nemoclaw vs openshell, which cli, nemoclaw cli, openshell cli, sandbox commands, nemoclaw cli commands, nemoclaw command reference, nemoclaw network policy, sandbox egress control operator approval, nemoclaw troubleshooting, nemoclaw debug sandbox issues."
 license: "Apache-2.0"
 ---
 
@@ -11,6 +11,7 @@ license: "Apache-2.0"
 
 ## References
 
+- **Load [references/agent-selection.md](references/agent-selection.md)** when deciding whether to onboard with `nemoclaw` (OpenClaw) or `nemohermes` (Hermes), or when explaining the differences between the two agents to operators. Compares the OpenClaw and Hermes agent paths through NemoClaw.
 - **Load [references/architecture.md](references/architecture.md)** when looking up architecture, plugin structure, or blueprint design. Describes the NemoClaw plugin and blueprint architecture and how they orchestrate the OpenClaw sandbox.
 - **[references/cli-selection-guide.md](references/cli-selection-guide.md)** — Explains when to use `nemoclaw` versus `openshell` for NemoClaw-managed sandboxes, including lifecycle, inference, policy, monitoring, file transfer, and gateway operations.
 - **Load [references/commands.md](references/commands.md)** when looking up a specific `nemoclaw` or `/nemoclaw` subcommand, flag, argument, or exit code. Includes the full CLI reference for slash commands and standalone NemoClaw commands.
