@@ -784,6 +784,12 @@ function applyPresetContent(
   }
 
   const currentPolicy = parseCurrentPolicy(rawPolicy);
+  if (rawPolicy.trim() && !currentPolicy) {
+    console.error(
+      `  Could not read the current policy for sandbox '${sandboxName}'; refusing to apply '${presetName}' to avoid overwriting it.`,
+    );
+    return false;
+  }
   const merged = mergePresetIntoPolicy(currentPolicy, presetEntries);
 
   const endpoints = getPresetEndpoints(presetContent);
@@ -882,6 +888,12 @@ function applyPresets(sandboxName: string, presetNames: string[]): boolean {
   }
 
   let merged = parseCurrentPolicy(rawPolicy);
+  if (rawPolicy.trim() && !merged) {
+    console.error(
+      `  Could not read the current policy for sandbox '${sandboxName}'; refusing to apply presets to avoid overwriting it.`,
+    );
+    return false;
+  }
   const endpointLogs: string[][] = [];
 
   for (const presetName of uniquePresetNames) {

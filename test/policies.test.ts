@@ -1033,6 +1033,105 @@ exit 1
     });
   });
 
+  describe("issue 4586: preset apply must not overwrite a live policy that could not be read", () => {
+    const registryModule = requireForTest(
+      path.join(REPO_ROOT, "dist", "lib", "state", "registry.js"),
+    ) as Record<string, any>;
+    const CUSTOM = "network_policies:\n  example:\n    host: example.com\n";
+    const DEGRADED = '#!/bin/sh\nif [ "$1" = "policy" ] && [ "$2" = "get" ]; then echo "error: gateway is restarting"; fi\nexit 0\n';
+    const EMPTY_OK = "#!/bin/sh\nexit 0\n";
+    let tmpHome: string;
+    let fakeOpenshell: string;
+    let origHome: string | undefined;
+    let resolveSpy: ReturnType<typeof vi.spyOn>;
+    let savedGetSandbox: any;
+    let savedAddCustomPolicy: any;
+
+    beforeEach(() => {
+      tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-issue4586-"));
+      const localBin = path.join(tmpHome, ".local", "bin");
+      fs.mkdirSync(localBin, { recursive: true });
+      fakeOpenshell = path.join(localBin, "openshell");
+      origHome = process.env.HOME;
+      process.env.HOME = tmpHome;
+      resolveSpy = vi
+        .spyOn(resolveOpenshellModule, "resolveOpenshell")
+        .mockReturnValue(fakeOpenshell);
+      savedGetSandbox = registryModule.getSandbox;
+      savedAddCustomPolicy = registryModule.addCustomPolicy;
+      registryModule.getSandbox = (name: string) => ({ name });
+      registryModule.addCustomPolicy = () => true;
+    });
+
+    afterEach(() => {
+      if (origHome === undefined) delete process.env.HOME;
+      else process.env.HOME = origHome;
+      resolveSpy.mockRestore();
+      registryModule.getSandbox = savedGetSandbox;
+      registryModule.addCustomPolicy = savedAddCustomPolicy;
+      fs.rmSync(tmpHome, { recursive: true, force: true });
+    });
+
+    it("aborts applyPresetContent (returns false) when policy get exits 0 with degraded output", () => {
+      fs.writeFileSync(fakeOpenshell, DEGRADED, { mode: 0o755 });
+      const errs: string[] = [];
+      const errSpy = vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => {
+        errs.push(a.map((x) => String(x)).join(" "));
+      });
+      const logs: string[] = [];
+      const logSpy = vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
+        logs.push(a.map((x) => String(x)).join(" "));
+      });
+      try {
+        const result = policies.applyPresetContent("alpha", "my-custom", CUSTOM, {
+          custom: { sourcePath: "/tmp/x.yaml" },
+        });
+        expect(result).toBe(false);
+        expect(errs.join("\n")).toMatch(/[Cc]ould not read the current policy/);
+        expect(logs.join("\n")).not.toContain("Applied preset:");
+      } finally {
+        errSpy.mockRestore();
+        logSpy.mockRestore();
+      }
+    });
+
+    it("still applies applyPresetContent when policy get returns an empty policy (fresh sandbox)", () => {
+      fs.writeFileSync(fakeOpenshell, EMPTY_OK, { mode: 0o755 });
+      const logs: string[] = [];
+      const logSpy = vi.spyOn(console, "log").mockImplementation((...a: unknown[]) => {
+        logs.push(a.map((x) => String(x)).join(" "));
+      });
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const result = policies.applyPresetContent("alpha", "my-custom", CUSTOM, {
+          custom: { sourcePath: "/tmp/x.yaml" },
+        });
+        expect(result).toBe(true);
+        expect(logs.join("\n")).toContain("Applied preset:");
+      } finally {
+        logSpy.mockRestore();
+        errSpy.mockRestore();
+      }
+    });
+
+    it("aborts applyPresets (returns false) when policy get exits 0 with degraded output", () => {
+      fs.writeFileSync(fakeOpenshell, DEGRADED, { mode: 0o755 });
+      const errs: string[] = [];
+      const errSpy = vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => {
+        errs.push(a.map((x) => String(x)).join(" "));
+      });
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+      try {
+        const result = policies.applyPresets("alpha", ["npm"]);
+        expect(result).toBe(false);
+        expect(errs.join("\n")).toMatch(/[Cc]ould not read the current policy/);
+      } finally {
+        errSpy.mockRestore();
+        logSpy.mockRestore();
+      }
+    });
+  });
+
   describe("extractPresetEntries", () => {
     it("returns null for null input", () => {
       expect(policies.extractPresetEntries(null)).toBe(null);
