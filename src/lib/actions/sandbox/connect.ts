@@ -760,7 +760,10 @@ export async function connectSandbox(
   sandboxName: string,
   { probeOnly = false }: SandboxConnectOptions = {},
 ): Promise<void> {
-  preflightVllmModelEnvOrExit();
+  // probe-only / recover never install or serve a model, so skip the
+  // express-vLLM model preflight for them (it only steers the install path
+  // and would otherwise hard-exit a recovery on a stale NEMOCLAW_VLLM_MODEL).
+  if (!probeOnly) preflightVllmModelEnvOrExit();
   const { isSandboxReady, parseSandboxStatus } = require("../../onboard");
   await ensureLiveSandboxOrExit(sandboxName, { allowNonReadyPhase: true });
 
