@@ -96,13 +96,13 @@ describe("buildLoopbackProbeEnv (#4181)", () => {
 
   it("preserves existing NO_PROXY entries when augmenting", () => {
     snapshotAndClear();
-    process.env.HTTP_PROXY = "http://proxy.example:8080";
-    process.env.NO_PROXY = "example.com,internal.corp";
+    process.env.HTTP_PROXY = "http://127.0.0.1:8118";
+    process.env.NO_PROXY = "existing-host,internal-host";
     const env = buildLoopbackProbeEnv();
-    const parts = (env.NO_PROXY ?? "").split(",").map((s) => s.trim());
-    assert.ok(parts.includes("example.com"), env.NO_PROXY);
-    assert.ok(parts.includes("internal.corp"), env.NO_PROXY);
-    assert.ok(parts.includes("localhost"), env.NO_PROXY);
-    assert.ok(parts.includes("127.0.0.1"), env.NO_PROXY);
+    const parts = new Set((env.NO_PROXY ?? "").split(",").map((s) => s.trim()));
+    assert.ok(parts.has("existing-host"), env.NO_PROXY);
+    assert.ok(parts.has("internal-host"), env.NO_PROXY);
+    assert.ok(parts.has("localhost"), env.NO_PROXY);
+    assert.ok(parts.has("127.0.0.1"), env.NO_PROXY);
   });
 });
