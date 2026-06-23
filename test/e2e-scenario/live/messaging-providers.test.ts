@@ -433,7 +433,9 @@ process.exit(Array.isArray(channels) && channels.some((c) => c?.channelId === "w
     );
     check(discordToken.length > 0, "M8: Discord token present in openclaw.json");
     check(discordToken !== state.tokens.discord, "M9: Discord token is not the host token");
-    const expectedManagedProxy = `http://${state.env.NEMOCLAW_PROXY_HOST ?? "10.200.0.1"}:${state.env.NEMOCLAW_PROXY_PORT ?? "3128"}`;
+    const expectedManagedProxyHost = nonEmpty(state.env.NEMOCLAW_PROXY_HOST) ?? "10.200.0.1";
+    const expectedManagedProxyPort = nonEmpty(state.env.NEMOCLAW_PROXY_PORT) ?? "3128";
+    const expectedManagedProxy = `http://${expectedManagedProxyHost}:${expectedManagedProxyPort}`;
     const discordAccountProxy = accountString(discordAccount, "proxy");
     const managedProxyUrl = typeof config.proxy?.proxyUrl === "string" ? config.proxy.proxyUrl : "";
     check(
